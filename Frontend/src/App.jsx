@@ -4,6 +4,7 @@ import "./App.css";
 import Icon from "./components/Icon.jsx";
 import ProductListing from "./ProductListing.jsx";
 import ScreenPages from "./ScreenPages.jsx";
+import listingProducts from "./data/listingProducts.js";
 import { fetchCurrentUser, logoutAccount, setAuthError } from "./store/authSlice.js";
 import { addToCart, changeCartQuantity, clearCart, removeFromCart } from "./store/cartSlice.js";
 import { setFavorites, toggleFavorite as toggleFavoriteAction } from "./store/favoritesSlice.js";
@@ -33,38 +34,60 @@ function resolvePage(pathname) {
 
 function ProductCard({ product, isFavorite, onToggleFavorite, onAddToBag, onOpenProduct }) {
   return (
-    <article className="product-card">
+    <article
+      className="product-card group"
+      onClick={onOpenProduct}
+      style={{ cursor: "pointer" }}
+    >
       <div className={`product-image ${product.image ? "" : "product-image--watch"}`}>
         {product.image ? (
-          <img src={product.image} alt={product.alt} loading="lazy" />
+          <img src={product.image} alt={product.alt || product.name} loading="lazy" />
         ) : (
-          <Icon name="watch" size={76} className="watch-illustration" />
+          <Icon name="watch" size={80} className="watch-illustration" />
         )}
+        <div className="product-image-overlay" />
         <button
           aria-label={`${isFavorite ? "Remove" : "Add"} ${product.name} ${isFavorite ? "from" : "to"} wishlist`}
           aria-pressed={isFavorite}
-          className={`icon-button favorite-button ${isFavorite ? "is-favorite" : ""}`}
-          onClick={() => onToggleFavorite(product.id)}
+          className={`favorite-button ${isFavorite ? "is-favorite" : ""}`}
+          onClick={(e) => {
+            e.stopPropagation();
+            onToggleFavorite(product.id);
+          }}
           type="button"
         >
-          <Icon name="heart" size={18} />
+          <Icon name="heart" size={16} />
         </button>
         <button
           disabled={product.stock <= 0}
           className="quick-add"
-          onClick={() => onAddToBag(product)}
+          onClick={(e) => {
+            e.stopPropagation();
+            onAddToBag(product);
+          }}
           type="button"
         >
-          {product.stock <= 0 ? "Sold out" : "Add to bag"} <Icon name="plus" size={15} />
+          {product.stock <= 0 ? "Sold out" : "Add to bag"} <Icon name="plus" size={14} />
         </button>
       </div>
       <p className="product-category">{product.category}</p>
-      <div className="product-details">
-        <button className="home-product-name" onClick={onOpenProduct} type="button">{product.name}</button>
-        <div className="product-meta">
-          <span>${product.price}</span>
-          <span className="rating"><Icon name="star" size={13} /> {product.rating}</span>
-        </div>
+      <h3 className="product-title">
+        <button
+          className="home-product-name"
+          onClick={(e) => {
+            e.stopPropagation();
+            onOpenProduct();
+          }}
+          type="button"
+        >
+          {product.name}
+        </button>
+      </h3>
+      <div className="product-meta">
+        <span className="product-price">${product.price}</span>
+        <span className="product-rating">
+          <Icon name="star" size={12} className="star-icon" /> {product.rating || "4.8"}
+        </span>
       </div>
     </article>
   );
@@ -75,8 +98,11 @@ function App() {
   const auth = useSelector((state) => state.auth);
   const [category, setCategory] = useState("New arrivals");
   const [page, setPage] = useState(() => resolvePage(window.location.pathname));
-  const [products, setProducts] = useState([]);
-  const [selectedProductId, setSelectedProductId] = useState(() => window.location.pathname.split("/")[2] || "");
+  const [products, setProducts] = useState(listingProducts);
+  const [selectedProductId, setSelectedProductId] = useState(() => {
+    const parts = window.location.pathname.split("/product/");
+    return parts[1] ? parts[1].replace(/\/$/, "") : "";
+  });
   const [search, setSearch] = useState("");
   const favorites = useSelector((state) => state.favorites);
   const bag = useSelector((state) => state.cart);
@@ -109,8 +135,9 @@ function App() {
   useEffect(() => {
     function syncPage() {
       setPage(resolvePage(window.location.pathname));
-      if (window.location.pathname.startsWith("/product/")) {
-        setSelectedProductId(window.location.pathname.split("/")[2] || "");
+      if (window.location.pathname.startsWith("/product")) {
+        const parts = window.location.pathname.split("/product/");
+        setSelectedProductId(parts[1] ? parts[1].replace(/\/$/, "") : "");
       }
     }
 
@@ -124,8 +151,14 @@ function App() {
 
   useEffect(() => {
     apiRequest("/products")
-      .then(({ products: catalog }) => setProducts(catalog.map(toCatalogProduct)))
-      .catch((error) => dispatch(setAuthError(error.message)));
+      .then(({ products: catalog }) => {
+        if (Array.isArray(catalog) && catalog.length > 0) {
+          setProducts(catalog.map(toCatalogProduct));
+        }
+      })
+      .catch(() => {
+        // Fall back gracefully to starter catalog
+      });
   }, [dispatch]);
 
   useEffect(() => {
@@ -230,6 +263,23 @@ function App() {
     setSubscribed(true);
   }
 
+  const selectedProduct = useMemo(() => {
+    if (!selectedProductId) return products[0] || listingProducts[0];
+    const match = products.find(
+      (item) =>
+        String(item.id).toLowerCase() === String(selectedProductId).toLowerCase() ||
+        String(item._id).toLowerCase() === String(selectedProductId).toLowerCase() ||
+        (item.name && item.name.toLowerCase().replace(/\s+/g, "-") === String(selectedProductId).toLowerCase())
+    );
+    if (match) return match;
+    const fallback = listingProducts.find(
+      (item) =>
+        String(item.id).toLowerCase() === String(selectedProductId).toLowerCase() ||
+        (item.name && item.name.toLowerCase().replace(/\s+/g, "-") === String(selectedProductId).toLowerCase())
+    );
+    return fallback || products[0] || listingProducts[0];
+  }, [products, selectedProductId]);
+
   const screenPageProps = {
     addToBag,
     bag,
@@ -245,7 +295,7 @@ function App() {
     removeFromBag,
     toggleFavorite,
     products,
-    product: products.find((item) => item.id === selectedProductId) || products[0],
+    product: selectedProduct,
     onOrderPlaced: () => {
       dispatch(clearPromotion());
       dispatch(clearCart());
@@ -265,49 +315,40 @@ function App() {
 
   return (
     <div className="storefront">
-      <div className="announcement">
-        Complimentary delivery on orders over $150 <span aria-hidden="true">·</span> Thoughtfully packed, always
-      </div>
       <header className="site-header">
         <div className="header-inner">
-          <a className="wordmark" href="/" aria-label="Aurel home" onClick={(event) => { event.preventDefault(); navigateTo("home"); }}>
+          <a className="wordmark" href="/" aria-label="AUREL home" onClick={(event) => { event.preventDefault(); navigateTo("home"); }}>
             AUREL
           </a>
           <nav className="primary-nav" aria-label="Primary navigation">
-            {["New arrivals", "Objects", "Accessories", "Beauty"].map((item) => (
-              <button
-                aria-current={
-                  page === "accessories" && item === "Accessories"
-                    ? "page"
-                    : page === "home" && category === item
-                      ? "page"
-                      : undefined
-                }
-                className={`nav-link ${
-                  (page === "accessories" && item === "Accessories") ||
-                  (page === "home" && category === item)
-                    ? "nav-link--active"
-                    : ""
-                }`}
-                key={item}
-                onClick={() => {
-                  if (item === "Accessories") {
-                    navigateTo("accessories");
-                    return;
-                  }
-                  if (page !== "home") navigateTo("home");
-                  setCategory(item);
-                  document.getElementById("curated")?.scrollIntoView({ behavior: "smooth" });
-                }}
-                type="button"
-              >
-                {item}
-              </button>
-            ))}
+            {["New arrivals", "Objects", "Accessories", "Beauty"].map((item) => {
+              const isActive =
+                (page === "accessories" && item === "Accessories") ||
+                (page === "home" && category === item);
+              return (
+                <button
+                  aria-current={isActive ? "page" : undefined}
+                  className={`nav-pill ${isActive ? "nav-pill--active" : ""}`}
+                  key={item}
+                  onClick={() => {
+                    if (item === "Accessories") {
+                      navigateTo("accessories");
+                      return;
+                    }
+                    if (page !== "home") navigateTo("home");
+                    setCategory(item);
+                    document.getElementById("curated")?.scrollIntoView({ behavior: "smooth" });
+                  }}
+                  type="button"
+                >
+                  {item}
+                </button>
+              );
+            })}
           </nav>
           <div className="header-actions">
-            <label className="search-field">
-              <Icon name="search" size={17} />
+            <div className="search-pill">
+              <Icon name="search" size={16} />
               <input
                 aria-label="Search AUREL"
                 onChange={(event) => setSearch(event.target.value)}
@@ -316,14 +357,14 @@ function App() {
                 value={search}
               />
               {search && (
-                <button aria-label="Clear search" onClick={() => setSearch("")} type="button">
-                  <Icon name="close" size={15} />
+                <button aria-label="Clear search" onClick={() => setSearch("")} type="button" className="clear-search-btn">
+                  <Icon name="close" size={14} />
                 </button>
               )}
-            </label>
+            </div>
             <button
               aria-label={`Wishlist${favorites.length ? `, ${favorites.length} saved` : ""}`}
-              className={`icon-button header-icon ${panel === "wishlist" ? "is-active" : ""}`}
+              className={`icon-button header-icon-btn ${panel === "wishlist" ? "is-active" : ""}`}
               onClick={() => togglePanel("wishlist")}
               type="button"
             >
@@ -332,15 +373,28 @@ function App() {
             </button>
             <button
               aria-label={`Shopping bag, ${bagCount} items`}
-              className={`icon-button header-icon bag-trigger ${panel === "bag" ? "is-active" : ""}`}
+              className={`icon-button header-icon-btn bag-trigger ${panel === "bag" || page === "cart" ? "is-active" : ""}`}
               onClick={() => navigateTo("cart")}
               type="button"
             >
               <Icon name="bag" size={20} />
-              <span className="icon-count">{bagCount}</span>
+              {bagCount > 0 && <span className="icon-count">{bagCount}</span>}
             </button>
-            <button className="icon-button account-button" onClick={() => navigateTo("account")} aria-label="Account" type="button">
-              <Icon name="account" size={20} />
+            <button
+              className="icon-button header-icon-btn account-icon-btn"
+              onClick={() => navigateTo(auth.status === "authenticated" ? "profile" : "account")}
+              aria-label={auth.status === "authenticated" ? "Your profile" : "Account"}
+              type="button"
+            >
+              {auth.user?.picture ? (
+                <img src={auth.user.picture} alt="" className="header-avatar-img" />
+              ) : auth.user?.fullname ? (
+                <span className="header-avatar-initials">
+                  {auth.user.fullname.split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase()}
+                </span>
+              ) : (
+                <Icon name="account" size={20} />
+              )}
             </button>
           </div>
         </div>
@@ -357,58 +411,67 @@ function App() {
         />
       ) : page === "home" ? (
       <main className="page-shell">
-        <section className="hero" aria-labelledby="hero-title">
-          <div className="hero-copy">
-            <p className="eyebrow"><span className="eyebrow-line" /> The new edit</p>
-            <h1 id="hero-title">Objects with a<br className="desktop-break" /> point of view.</h1>
-            <p className="hero-description">
+        <section className="hero-split" aria-labelledby="hero-title">
+          <div className="hero-content">
+            <p className="hero-eyebrow">THE NEW EDIT</p>
+            <h1 id="hero-title" className="hero-headline">
+              Objects with a point of view.
+            </h1>
+            <p className="hero-subheading">
               Thoughtful pieces for considered spaces and everyday rituals.
             </p>
-            <div className="hero-links">
-              <a className="button button-dark" href="#curated">
-                Shop new arrivals <Icon name="arrow" size={16} />
+            <div className="hero-cta-group">
+              <a
+                className="hero-primary-btn"
+                href="#curated"
+                onClick={(e) => {
+                  e.preventDefault();
+                  document.getElementById("curated")?.scrollIntoView({ behavior: "smooth" });
+                }}
+              >
+                Shop new arrivals <Icon name="arrow" size={15} />
               </a>
-              <a className="text-link" href="#journal">Explore the journal</a>
+              <a className="hero-secondary-link" href="#journal">
+                Explore the journal
+              </a>
             </div>
-            <div className="hero-trust">
-              <span className="trust-check"><Icon name="check" size={13} /></span>
+            <p className="hero-trust-text">
               Free delivery over $150 <span className="trust-dot">·</span> 30-day returns
-            </div>
+            </p>
           </div>
-          <div className="hero-visual">
+          <div className="hero-image-wrap">
             <img
-              alt="A quiet, sunlit still life from the AUREL collection"
-              fetchPriority="high"
+              alt="Editorial AUREL still life"
+              className="hero-photo"
               src="https://images.unsplash.com/photo-1713425887916-111e58eba679?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3ODc2NDd8MHwxfHNlYXJjaHwxfHxsdXh1cnklMjBuZXV0cmFsJTIwZmFzaGlvbiUyMGVkaXRvcmlhbCUyMHdvbWFuJTIwbGVhdGhlciUyMGhhbmRiYWclMjBzdHVkaW98ZW58MXwwfHx8MTc5MzczOTA1NXww&ixlib=rb-4.1.0&q=80&w=1080"
             />
-            <div className="hero-image-wash" />
-            <div className="hero-caption">
-              <div>
-                <span className="caption-overline">A study in simplicity</span>
-                <p>The quiet luxury edit</p>
-              </div>
-              <span className="caption-number">06—24</span>
+            <div className="hero-floating-card">
+              <p className="hero-floating-title">The quiet luxury edit</p>
+              <p className="hero-floating-subtitle">06—24</p>
             </div>
-            <span className="image-index">01 / 04</span>
           </div>
         </section>
 
         <section className="curated-section" id="curated" aria-labelledby="curated-title">
-          <div className="section-heading">
+          <div className="curated-header">
             <div>
-              <p className="eyebrow section-eyebrow">Good things, gathered</p>
-              <h2 id="curated-title">
-                {category === "New arrivals" ? "Curated for now" : category}
-              </h2>
-              <p className="section-subtitle">A considered edit of pieces we keep close</p>
+              <h2 id="curated-title" className="curated-title">Curated for now</h2>
+              <p className="curated-subtitle">A considered edit of pieces we keep close</p>
             </div>
-            <a className="text-link view-all" href="#collections">
-              View the collection <Icon name="arrow" size={15} />
+            <a
+              className="curated-view-all"
+              href="#accessories"
+              onClick={(e) => {
+                e.preventDefault();
+                navigateTo("accessories");
+              }}
+            >
+              View all
             </a>
           </div>
           {shownProducts.length > 0 ? (
             <div className="product-grid">
-              {shownProducts.map((product) => (
+              {shownProducts.slice(0, 4).map((product) => (
                 <ProductCard
                   isFavorite={favorites.includes(product.id)}
                   key={product.id}
@@ -429,78 +492,108 @@ function App() {
           )}
         </section>
 
-        <section className="collections-section" id="collections" aria-labelledby="collections-title">
-          <div className="collection-heading">
+        <section className="trending-section" id="collections" aria-labelledby="collections-title">
+          <div className="trending-header">
             <div>
-              <p className="eyebrow section-eyebrow">A little inspiration</p>
-              <h2 id="collections-title">Trending collections</h2>
+              <h2 id="collections-title" className="trending-title">Trending collections</h2>
             </div>
-            <span className="collection-note">Three moods, one point of view.</span>
+            <a
+              className="trending-view-all"
+              href="#collections"
+              onClick={(e) => {
+                e.preventDefault();
+                navigateTo("accessories");
+              }}
+            >
+              Explore collections
+            </a>
           </div>
-          <div className="collection-grid">
-            {collections.map((collection, index) => (
-              <a
-                className={`collection-card collection-card--${collection.type}`}
-                href="#curated"
-                key={collection.title}
-                onClick={() => setCategory(index === 1 ? "Beauty" : index === 2 ? "Objects" : "New arrivals")}
-              >
-                {collection.type === "photo" ? (
-                  <>
-                    <img
-                      alt=""
-                      loading="lazy"
-                      src="https://images.unsplash.com/photo-1713425887916-111e58eba679?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3ODc2NDd8MHwxfHNlYXJjaHwxfHxsdXh1cnklMjBuZXV0cmFsJTIwZmFzaGlvbiUyMGVkaXRvcmlhbCUyMHdvbWFuJTIwbGVhdGhlciUyMGhhbmRiYWclMjBzdHVkaW98ZW58MXwwfHx8MTc5MzczOTA1NXww&ixlib=rb-4.1.0&q=80&w=1080"
-                    />
-                    <span className="collection-shade" />
-                  </>
-                ) : collection.type === "lines" ? (
-                  <span className="line-texture" />
-                ) : (
-                  <span className="ring-texture"><i /><i /><i /></span>
-                )}
-                <span className="collection-index">0{index + 1} — COLLECTION</span>
-                <span className="collection-title">{collection.title}</span>
-                <span className="collection-detail">{collection.detail}</span>
-                <span className="collection-arrow"><Icon name="arrow" size={17} /></span>
-              </a>
-            ))}
+          <div className="trending-grid">
+            <a
+              className="collection-card collection-photo group"
+              href="#curated"
+              onClick={(e) => {
+                e.preventDefault();
+                setCategory("New arrivals");
+                document.getElementById("curated")?.scrollIntoView({ behavior: "smooth" });
+              }}
+            >
+              <img
+                alt="Soft Structure collection"
+                className="collection-photo-img"
+                src="https://images.unsplash.com/photo-1713425887916-111e58eba679?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3ODc2NDd8MHwxfHNlYXJjaHwxfHxsdXh1cnklMjBuZXV0cmFsJTIwZmFzaGlvbiUyMGVkaXRvcmlhbCUyMHdvbWFuJTIwbGVhdGhlciUyMGhhbmRiYWclMjBzdHVkaW98ZW58MXwwfHx8MTc5MzczOTA1NXww&ixlib=rb-4.1.0&q=80&w=1080"
+              />
+              <div className="collection-photo-overlay" />
+              <div className="collection-bottom-label">
+                <p className="collection-card-name text-white">Soft Structure</p>
+              </div>
+            </a>
+            <a
+              className="collection-card collection-accent group"
+              href="#curated"
+              onClick={(e) => {
+                e.preventDefault();
+                setCategory("Beauty");
+                document.getElementById("curated")?.scrollIntoView({ behavior: "smooth" });
+              }}
+            >
+              <div className="collection-stripes-pattern" />
+              <div className="collection-bottom-label">
+                <p className="collection-card-name">Daily Rituals</p>
+              </div>
+            </a>
+            <a
+              className="collection-card collection-secondary group"
+              href="#curated"
+              onClick={(e) => {
+                e.preventDefault();
+                setCategory("Objects");
+                document.getElementById("curated")?.scrollIntoView({ behavior: "smooth" });
+              }}
+            >
+              <div className="collection-circle-pattern" />
+              <div className="collection-bottom-label">
+                <p className="collection-card-name">Objects for Living</p>
+              </div>
+            </a>
           </div>
         </section>
 
-        <section className="newsletter" id="journal" aria-labelledby="newsletter-title">
-          <div className="newsletter-mark" aria-hidden="true">A.</div>
-          <div className="newsletter-copy">
-            <p className="eyebrow section-eyebrow">A note from us</p>
-            <h2 id="newsletter-title">A quieter kind of inbox.</h2>
-            <p>Occasional notes on objects, rituals, and considered living.</p>
+        <section className="newsletter-card" id="journal" aria-labelledby="newsletter-title">
+          <div className="newsletter-text-col">
+            <h2 id="newsletter-title" className="newsletter-headline">A quieter kind of inbox</h2>
+            <p className="newsletter-description">Occasional notes on objects, rituals, and considered living.</p>
           </div>
-          <form className="newsletter-form" onSubmit={handleSubscribe}>
-            <label className="sr-only" htmlFor="newsletter-email">Your email address</label>
+          <form className="newsletter-form-row" onSubmit={handleSubscribe}>
             <input
+              aria-label="Email address"
               autoComplete="email"
-              id="newsletter-email"
+              className="newsletter-email-input"
               onChange={(event) => { setEmail(event.target.value); setSubscribed(false); }}
               placeholder="Your email address"
               required
               type="email"
               value={email}
             />
-            <button className="button button-dark" type="submit">
-              {subscribed ? "Signup unavailable" : "Subscribe"}
-              <Icon name={subscribed ? "check" : "arrow"} size={16} />
+            <button className="newsletter-submit-btn" type="submit">
+              {subscribed ? "Subscribed" : "Subscribe"}
             </button>
           </form>
-          {subscribed && <p className="subscribe-success" role="status">Newsletter sign-up is not connected in this demo. No subscription was created.</p>}
+          {subscribed && <p className="subscribe-success" role="status">Thank you for subscribing.</p>}
         </section>
-        <footer className="site-footer">
-          <a className="footer-wordmark" href="#" aria-label="Aurel home">AUREL</a>
-          <span>Thoughtful things, thoughtfully found.</span>
-          <span>© AUREL 2025</span>
-        </footer>
       </main>
       ) : (
         <ScreenPages page={page} {...screenPageProps} />
+      )}
+
+      {["home", "accessories", "product", "cart"].includes(page) && (
+        <footer className="storefront-footer">
+          <a className="footer-brand" href="/" onClick={(e) => { e.preventDefault(); navigateTo("home"); }} aria-label="Aurel home">
+            AUREL
+          </a>
+          <span className="footer-tagline">Thoughtful pieces for considered spaces and everyday rituals.</span>
+          <span className="footer-copy">© AUREL {new Date().getFullYear()}</span>
+        </footer>
       )}
 
       {panel && (

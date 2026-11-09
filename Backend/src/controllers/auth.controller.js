@@ -1,5 +1,6 @@
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
+const axios = require("axios");
 const userModel = require("../models/user-model");
 const ownerModel = require("../models/owner-model");
 
@@ -8,9 +9,12 @@ const TOKEN_LIFETIME = "7d";
 
 function getJwtSecret() {
     if (!process.env.JWT_SECRET) {
-        const error = new Error("JWT_SECRET must be configured before authentication can be used.");
-        error.status = 500;
-        throw error;
+        if (process.env.NODE_ENV === "production") {
+            const error = new Error("JWT_SECRET must be configured before authentication can be used.");
+            error.status = 500;
+            throw error;
+        }
+        return "development-jwt-secret-key-aurel-2025";
     }
 
     return process.env.JWT_SECRET;
@@ -156,4 +160,170 @@ async function updateProfile(req, res, next) {
     }
 }
 
-module.exports = { register, loginCustomer, loginOwner, logout, getProfile, updateProfile, publicAccount };
+function getGoogleConfig() {
+    const clientId = process.env.GOOGLE_CLIENT_ID || process.env["Client-ID"] || process.env.CLIENT_ID;
+    const clientSecret = process.env.GOOGLE_CLIENT_SECRET || process.env["Client-secret"] || process.env.CLIENT_SECRET;
+    const redirectUri = process.env.GOOGLE_REDIRECT_URI || "http://localhost:3000/auth/google/callback";
+    const frontendUrl = process.env.FRONTEND_URL || "http://localhost:5173";
+
+    if (!clientId) {
+        throw new Error("Google Client ID is not configured.");
+    }
+
+    return { clientId, clientSecret, redirectUri, frontendUrl };
+}
+
+async function findOrCreateGoogleUser({ googleId, email, fullname, picture }) {
+    let user = await userModel.findOne({
+        $or: [{ googleId }, { email: email.toLowerCase() }],
+    });
+
+    if (user) {
+        let changed = false;
+        if (!user.googleId) {
+            user.googleId = googleId;
+            changed = true;
+        }
+        if (picture && !user.picture) {
+            user.picture = picture;
+            changed = true;
+        }
+        if (changed) {
+            await user.save();
+        }
+        return user;
+    }
+
+    user = await userModel.create({
+        fullname: fullname || email.split("@")[0],
+        email: email.toLowerCase(),
+        googleId,
+        picture,
+    });
+
+    return user;
+}
+
+function initiateGoogleAuth(req, res) {
+    try {
+        const { clientId, redirectUri } = getGoogleConfig();
+        const rootUrl = "https://accounts.google.com/o/oauth2/v2/auth";
+        const options = {
+            redirect_uri: redirectUri,
+            client_id: clientId,
+            access_type: "offline",
+            response_type: "code",
+            prompt: "consent",
+            scope: [
+                "https://www.googleapis.com/auth/userinfo.profile",
+                "https://www.googleapis.com/auth/userinfo.email",
+                "openid",
+            ].join(" "),
+        };
+        const qs = new URLSearchParams(options);
+        return res.redirect(`${rootUrl}?${qs.toString()}`);
+    } catch (error) {
+        console.error("Google OAuth initialization error:", error);
+        return res.status(500).json({ message: error.message });
+    }
+}
+
+async function googleAuthCallback(req, res, next) {
+    let frontend = "http://localhost:5173";
+    try {
+        const { frontendUrl, clientId, clientSecret, redirectUri } = getGoogleConfig();
+        frontend = frontendUrl;
+        const code = req.query.code;
+
+        if (!code) {
+            const errorDesc = req.query.error || "Google authorization code missing";
+            return res.redirect(`${frontend}/account?error=${encodeURIComponent(errorDesc)}`);
+        }
+
+        const tokenResponse = await axios.post(
+            "https://oauth2.googleapis.com/token",
+            new URLSearchParams({
+                code,
+                client_id: clientId,
+                client_secret: clientSecret,
+                redirect_uri: redirectUri,
+                grant_type: "authorization_code",
+            }).toString(),
+            {
+                headers: { "Content-Type": "application/x-www-form-urlencoded" },
+            }
+        );
+
+        const { access_token } = tokenResponse.data;
+
+        const userInfoResponse = await axios.get("https://www.googleapis.com/oauth2/v2/userinfo", {
+            headers: { Authorization: `Bearer ${access_token}` },
+        });
+
+        const { id: googleId, email, name: fullname, picture } = userInfoResponse.data;
+
+        if (!email) {
+            return res.redirect(`${frontend}/account?error=${encodeURIComponent("Could not retrieve email from Google")}`);
+        }
+
+        const user = await findOrCreateGoogleUser({ googleId, email, fullname, picture });
+
+        setAuthCookie(res, user);
+
+        return res.redirect(`${frontend}/`);
+    } catch (error) {
+        console.error("Google OAuth callback error:", error.response?.data || error.message);
+        const message = error.response?.data?.error_description || error.message || "Failed to authenticate with Google.";
+        return res.redirect(`${frontend}/account?error=${encodeURIComponent(message)}`);
+    }
+}
+
+async function loginWithGoogleCredential(req, res, next) {
+    try {
+        const { credential, token } = req.body;
+        const idToken = credential || token;
+
+        if (!idToken) {
+            return res.status(400).json({ message: "Google credential/token is required." });
+        }
+
+        const { clientId } = getGoogleConfig();
+
+        const verificationResponse = await axios.get(`https://oauth2.googleapis.com/tokeninfo?id_token=${idToken}`);
+        const payload = verificationResponse.data;
+
+        if (payload.aud !== clientId) {
+            return res.status(401).json({ message: "Invalid Google token audience." });
+        }
+
+        const { sub: googleId, email, name: fullname, picture } = payload;
+
+        if (!email) {
+            return res.status(400).json({ message: "Email not provided by Google." });
+        }
+
+        const user = await findOrCreateGoogleUser({ googleId, email, fullname, picture });
+
+        setAuthCookie(res, user);
+
+        return res.status(200).json({ user: publicAccount(user) });
+    } catch (error) {
+        console.error("Google ID Token verification error:", error.response?.data || error.message);
+        return res.status(401).json({
+            message: "Unable to verify Google credentials. Please try signing in again.",
+        });
+    }
+}
+
+module.exports = {
+    register,
+    loginCustomer,
+    loginOwner,
+    logout,
+    getProfile,
+    updateProfile,
+    publicAccount,
+    initiateGoogleAuth,
+    googleAuthCallback,
+    loginWithGoogleCredential,
+};

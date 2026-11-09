@@ -145,6 +145,43 @@ export default function Icon({ name, size = 20, className = "" }) {
         <circle cx="19" cy="12" r="1" />
       </>
     ),
+    sparkles: (
+      <>
+        <path d="m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3L12 3Z" />
+        <path d="M5 3v4" />
+        <path d="M19 17v4" />
+        <path d="M3 5h4" />
+        <path d="M17 19h4" />
+      </>
+    ),
+    truck: (
+      <>
+        <path d="M14 18V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v11a1 1 0 0 0 1 1h2" />
+        <path d="M15 18H9" />
+        <path d="M19 18h2a1 1 0 0 0 1-1v-3.65a1 1 0 0 0-.22-.624l-3.48-4.35A1 1 0 0 0 17.52 8H14v10Z" />
+        <circle cx="17" cy="18.5" r="2.5" />
+        <circle cx="7" cy="18.5" r="2.5" />
+      </>
+    ),
+    arrowUp: (
+      <>
+        <path d="m5 12 7-7 7 7" />
+        <path d="M12 19V5" />
+      </>
+    ),
+    shieldCheck: (
+      <>
+        <path d="M20 13c0 5-8 9-8 9s-8-4-8-9V5l8-3 8 3v8z" />
+        <path d="m9 12 2 2 4-4" />
+      </>
+    ),
+    rotateCcw: (
+      <>
+        <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+        <path d="M3 3v5h5" />
+      </>
+    ),
+    menu: <path d="M4 6h16M4 12h16M4 18h16" />,
   };
 
   return (

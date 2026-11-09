@@ -1,9 +1,9 @@
 const listingProducts = [
   {
     id: "fold-tote",
-    category: "Bags",
+    category: "Accessories",
     name: "The Fold Tote",
-    price: 245,
+    price: 185,
     rating: "4.9",
     badge: "New",
     color: "Sand",
@@ -16,7 +16,7 @@ const listingProducts = [
     id: "serein-serum",
     category: "Beauty",
     name: "Serein Serum",
-    price: 88,
+    price: 68,
     rating: "4.8",
     color: "Ivory",
     inStock: true,
@@ -28,7 +28,7 @@ const listingProducts = [
     id: "arc-vessel",
     category: "Objects",
     name: "Arc Vessel",
-    price: 112,
+    price: 124,
     rating: "4.7",
     badge: "Sale",
     color: "Ivory",
@@ -36,6 +36,17 @@ const listingProducts = [
     handFinished: true,
     image:
       "https://images.unsplash.com/photo-1660721671073-e139688fa3cf?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3ODc2NDd8MHwxfHNlYXJjaHwxfHxsdXh1cnklMjBuZXV0cmFsJTIwaG9tZSUyMGRlY29yJTIwdmFzZSUyMHByb2R1Y3QlMjBwaG90b3xlbnwxfDJ8fHwxNzkzNzM5MDU4fDA&ixlib=rb-4.1.0&q=80&w=1080",
+  },
+  {
+    id: "meridian-watch",
+    category: "Accessories",
+    name: "Meridian Watch",
+    price: 240,
+    rating: "4.9",
+    color: "Gold",
+    inStock: true,
+    handFinished: true,
+    image: "",
   },
   {
     id: "isla-scarf",

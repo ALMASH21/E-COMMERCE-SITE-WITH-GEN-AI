@@ -13,6 +13,11 @@ router.post("/register", authValidators.register, validateRequest, authControlle
 router.post("/login", authValidators.login, validateRequest, authController.loginCustomer);
 router.post("/logout", authController.logout);
 router.get("/profile", authUser, authController.getProfile);
+
+// Google OAuth 2.0 endpoints
+router.get("/auth/google", authController.initiateGoogleAuth);
+router.get("/auth/google/callback", authController.googleAuthCallback);
+router.post("/auth/google", authController.loginWithGoogleCredential);
 router.patch(
     "/profile",
     authUser,
