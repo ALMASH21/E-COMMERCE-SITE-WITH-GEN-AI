@@ -1090,7 +1090,12 @@ function CustomerProfile({ navigate, favorites, onLogout, products, toggleFavori
         <aside aria-label="Account navigation" className="flowstep-profile-sidebar-card">
           <div className="flowstep-sidebar-user-block">
             {user?.picture ? (
-              <img src={user.picture} alt={displayName} className="flowstep-sidebar-avatar-img" />
+              <img
+                src={user.picture}
+                alt={displayName}
+                className="flowstep-sidebar-avatar-img"
+                referrerPolicy="no-referrer"
+              />
             ) : (
               <div className="flowstep-sidebar-avatar-initials">{userInitials}</div>
             )}
@@ -1199,7 +1204,12 @@ function CustomerProfile({ navigate, favorites, onLogout, products, toggleFavori
 
                 <div className="flowstep-user-detail-row">
                   {user?.picture ? (
-                    <img src={user.picture} alt={displayName} className="flowstep-main-avatar-img" />
+                    <img
+                      src={user.picture}
+                      alt={displayName}
+                      className="flowstep-main-avatar-img"
+                      referrerPolicy="no-referrer"
+                    />
                   ) : (
                     <div className="flowstep-main-avatar-circle">{userInitials}</div>
                   )}
@@ -1682,7 +1692,16 @@ function OwnerShell({ page, navigate, children, user, onLogout }) {
 
         <div className="owner-sidebar-bottom">
           <span className="owner-avatar">
-            {(user?.fullname || "Owner").split(" ").map((part) => part[0]).join("").slice(0, 2).toUpperCase()}
+            {user?.picture ? (
+              <img
+                src={user.picture}
+                alt=""
+                style={{ width: "100%", height: "100%", borderRadius: "50%", objectFit: "cover" }}
+                referrerPolicy="no-referrer"
+              />
+            ) : (
+              (user?.fullname || "Owner").split(" ").map((part) => part[0]).join("").slice(0, 2).toUpperCase()
+            )}
           </span>
           <span>
             <strong>{user?.fullname || "Store owner"}</strong>
@@ -2190,33 +2209,78 @@ function OwnerOrders({ navigate, user, onLogout }) {
 
 function OwnerCustomers({ navigate, user, onLogout }) {
   const [customers, setCustomers] = useState([]);
+  const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
   useEffect(() => {
     apiRequest("/owners/customers")
-      .then(({ customers: result }) => setCustomers(result))
+      .then(({ customers: result }) => setCustomers(result || []))
       .catch((requestError) => setError(requestError.message))
       .finally(() => setLoading(false));
   }, []);
+
+  const filteredCustomers = customers.filter((c) =>
+    `${c.fullname} ${c.email}`.toLowerCase().includes(search.trim().toLowerCase())
+  );
 
   return (
     <OwnerShell page="/owner/customers" navigate={navigate} user={user} onLogout={onLogout}>
       <PageTitle eyebrow="YOUR COMMUNITY" title="Customers" description={`${customers.length} registered customer${customers.length === 1 ? "" : "s"}.`} />
       {error && <p className="account-alert" role="alert">{error}</p>}
       <section className="admin-card product-management-card">
+        <div className="product-management-toolbar">
+          <div className="admin-search">
+            <Icon name="search" size={15} />
+            <input
+              placeholder="Search by name or email…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+          </div>
+        </div>
         <div className="admin-table-scroll">
           <table className="admin-table">
             <thead><tr>{["Customer", "Joined", "Orders", "Lifetime spend"].map((item) => <th key={item}>{item}</th>)}</tr></thead>
             <tbody>
-              {loading ? <tr><td colSpan="4">Loading customers…</td></tr> : customers.length ? customers.map((customer) => (
+              {loading ? <tr><td colSpan="4">Loading customers…</td></tr> : filteredCustomers.length ? filteredCustomers.map((customer) => (
                 <tr key={customer._id}>
-                  <td><strong>{customer.fullname}</strong><small>{customer.email}</small></td>
+                  <td>
+                    <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                      {customer.picture ? (
+                        <img
+                          src={customer.picture}
+                          alt=""
+                          style={{ width: 34, height: 34, borderRadius: "50%", objectFit: "cover" }}
+                          referrerPolicy="no-referrer"
+                        />
+                      ) : (
+                        <span style={{
+                          display: "grid",
+                          width: 34,
+                          height: 34,
+                          placeItems: "center",
+                          borderRadius: "50%",
+                          background: "#e8e4dc",
+                          color: "#5c5548",
+                          fontSize: 12,
+                          fontWeight: 600,
+                          flexShrink: 0
+                        }}>
+                          {(customer.fullname || "C").slice(0, 2).toUpperCase()}
+                        </span>
+                      )}
+                      <div>
+                        <strong>{customer.fullname}</strong>
+                        <small>{customer.email}</small>
+                      </div>
+                    </div>
+                  </td>
                   <td>{customer.createdAt ? new Date(customer.createdAt).toLocaleDateString() : "—"}</td>
                   <td>{customer.orders}</td>
                   <td>${Number(customer.spent).toFixed(2)}</td>
                 </tr>
-              )) : <tr><td colSpan="4">No customer accounts yet.</td></tr>}
+              )) : <tr><td colSpan="4">{search ? "No matching customers found." : "No customer accounts yet."}</td></tr>}
             </tbody>
           </table>
         </div>

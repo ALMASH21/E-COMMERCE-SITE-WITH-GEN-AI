@@ -387,14 +387,27 @@ function App() {
               type="button"
             >
               {auth.user?.picture ? (
-                <img src={auth.user.picture} alt="" className="header-avatar-img" />
-              ) : auth.user?.fullname ? (
-                <span className="header-avatar-initials">
-                  {auth.user.fullname.split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase()}
-                </span>
-              ) : (
-                <Icon name="account" size={20} />
-              )}
+                <img
+                  src={auth.user.picture}
+                  alt={auth.user.fullname || "Profile"}
+                  className="header-avatar-img"
+                  referrerPolicy="no-referrer"
+                  onError={(e) => {
+                    e.currentTarget.style.display = "none";
+                    if (e.currentTarget.nextElementSibling) {
+                      e.currentTarget.nextElementSibling.style.display = "inline";
+                    }
+                  }}
+                />
+              ) : null}
+              <span
+                className="header-avatar-initials"
+                style={{ display: auth.user?.picture ? "none" : "inline" }}
+              >
+                {auth.user?.fullname
+                  ? auth.user.fullname.split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase()
+                  : <Icon name="account" size={20} />}
+              </span>
             </button>
           </div>
         </div>

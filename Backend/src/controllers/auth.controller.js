@@ -26,6 +26,7 @@ function publicAccount(account) {
         fullname: account.fullname,
         email: account.email,
         role: account.role,
+        picture: account.picture || "",
     };
     if (account.role === "customer") {
         Object.assign(publicUser, {
@@ -146,7 +147,7 @@ function getProfile(req, res) {
 async function updateProfile(req, res, next) {
     try {
         const updates = {};
-        for (const key of ["fullname", "phoneNo", "preferences", "addresses"]) {
+        for (const key of ["fullname", "phoneNo", "preferences", "addresses", "picture"]) {
             if (req.body[key] !== undefined) updates[key] = req.body[key];
         }
         Object.assign(req.user, updates);
@@ -180,12 +181,16 @@ async function findOrCreateGoogleUser({ googleId, email, fullname, picture }) {
 
     if (user) {
         let changed = false;
-        if (!user.googleId) {
+        if (!user.googleId && googleId) {
             user.googleId = googleId;
             changed = true;
         }
-        if (picture && !user.picture) {
+        if (picture && user.picture !== picture) {
             user.picture = picture;
+            changed = true;
+        }
+        if (fullname && (!user.fullname || user.fullname === user.email.split("@")[0])) {
+            user.fullname = fullname;
             changed = true;
         }
         if (changed) {
@@ -198,7 +203,7 @@ async function findOrCreateGoogleUser({ googleId, email, fullname, picture }) {
         fullname: fullname || email.split("@")[0],
         email: email.toLowerCase(),
         googleId,
-        picture,
+        picture: picture || "",
     });
 
     return user;
@@ -254,13 +259,34 @@ async function googleAuthCallback(req, res, next) {
             }
         );
 
-        const { access_token } = tokenResponse.data;
+        const { access_token, id_token: googleIdToken } = tokenResponse.data;
 
-        const userInfoResponse = await axios.get("https://www.googleapis.com/oauth2/v2/userinfo", {
-            headers: { Authorization: `Bearer ${access_token}` },
-        });
+        let googleId = "";
+        let email = "";
+        let fullname = "";
+        let picture = "";
 
-        const { id: googleId, email, name: fullname, picture } = userInfoResponse.data;
+        try {
+            const userInfoResponse = await axios.get("https://www.googleapis.com/oauth2/v2/userinfo", {
+                headers: { Authorization: `Bearer ${access_token}` },
+            });
+            googleId = userInfoResponse.data.id;
+            email = userInfoResponse.data.email;
+            fullname = userInfoResponse.data.name;
+            picture = userInfoResponse.data.picture;
+        } catch (userInfoError) {
+            console.warn("Could not retrieve userinfo endpoint data, will check id_token:", userInfoError.message);
+        }
+
+        if ((!email || !picture) && googleIdToken) {
+            const decoded = jwt.decode(googleIdToken);
+            if (decoded) {
+                if (!googleId) googleId = decoded.sub;
+                if (!email) email = decoded.email;
+                if (!fullname) fullname = decoded.name;
+                if (!picture) picture = decoded.picture;
+            }
+        }
 
         if (!email) {
             return res.redirect(`${frontend}/account?error=${encodeURIComponent("Could not retrieve email from Google")}`);

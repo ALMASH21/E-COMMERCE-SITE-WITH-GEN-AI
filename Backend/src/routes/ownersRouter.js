@@ -181,7 +181,7 @@ router.patch(
 router.get("/customers", authUser, authorizeRoles("owner", "admin"), async (req, res, next) => {
     try {
         const [customers, spending] = await Promise.all([
-            userModel.find().select("fullname email createdAt").sort({ createdAt: -1 }).limit(200).lean(),
+            userModel.find().select("fullname email createdAt picture").sort({ createdAt: -1 }).limit(200).lean(),
             orderModel.aggregate([
                 { $match: { status: { $ne: "Cancelled" } } },
                 { $group: { _id: "$customer", orders: { $sum: 1 }, spent: { $sum: "$total" } } },
