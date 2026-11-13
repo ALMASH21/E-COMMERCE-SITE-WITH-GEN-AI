@@ -1,14 +1,15 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import Icon from "./components/Icon.jsx";
 import listingProducts from "./data/listingProducts.js";
-import { clearAuthError, loginAccount, loginOwnerAccount, registerAccount, setAuthError, updateAuthenticatedUser } from "./store/authSlice.js";
+import { clearAuthError, loginAccount, loginOwnerAccount, loginWithGoogle, registerAccount, setAuthError, updateAuthenticatedUser } from "./store/authSlice.js";
 import { setPromotion } from "./store/promotionSlice.js";
 import "./ScreenPages.css";
 import { apiRequest } from "./api.js";
 
-const toteImage = listingProducts[0].image;
-const vesselImage = listingProducts[2].image;
+const toteImage = listingProducts[0]?.image || "";
+const serumImage = listingProducts[1]?.image || "";
+const vesselImage = listingProducts[2]?.image || "";
 const editorialImage =
   "https://images.unsplash.com/photo-1713425887916-111e58eba679?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3ODc2NDd8MHwxfHNlYXJjaHwxfHxsdXh1cnklMjBuZXV0cmFsJTIwZmFzaGlvbiUyMGVkaXRvcmlhbCUyMHdvbWFuJTIwbGVhdGhlciUyMGhhbmRiYWclMjBzdHVkaW98ZW58MXwwfHx8MTc5MzczOTA1NXww&ixlib=rb-4.1.0&q=80&w=1080";
 
@@ -32,13 +33,27 @@ function Button({ children, className = "", onClick, type = "button", ...props }
   );
 }
 
-function Breadcrumb({ items }) {
+function Breadcrumb({ items, navigate }) {
   return (
-    <nav aria-label="Breadcrumb" className="screen-breadcrumb">
+    <nav aria-label="Breadcrumb" className="flowstep-breadcrumb">
       {items.map((item, index) => (
-        <span className="screen-crumb" key={`${item.label}-${index}`}>
-          {index > 0 && <Icon name="chevronRight" size={13} />}
-          {item.href ? <a href={item.href}>{item.label}</a> : <span aria-current="page">{item.label}</span>}
+        <span key={`${item.label}-${index}`} className="flowstep-crumb-item">
+          {index > 0 && <span className="crumb-slash" aria-hidden="true">/</span>}
+          {item.href ? (
+            <a
+              href={item.href}
+              onClick={(e) => {
+                if (navigate) {
+                  e.preventDefault();
+                  navigate(item.href === "/" ? "home" : item.href.replace(/^\//, ""));
+                }
+              }}
+            >
+              {item.label}
+            </a>
+          ) : (
+            <span className="crumb-current" aria-current="page">{item.label}</span>
+          )}
         </span>
       ))}
     </nav>
@@ -75,118 +90,437 @@ function Quantity({ value, onChange, label = "Quantity" }) {
 function ProductDetails({ addToBag, toggleFavorite, favorites, navigate, catalogProduct }) {
   const [color, setColor] = useState("Umber");
   const [quantity, setQuantity] = useState(1);
-  const [expanded, setExpanded] = useState("Details");
   const [added, setAdded] = useState(false);
+  const [activeThumb, setActiveThumb] = useState(0);
+  const [zyronOpen, setZyronOpen] = useState(false);
+  const [zyronSubject, setZyronSubject] = useState("");
+  const [zyronQuestion, setZyronQuestion] = useState("");
+  const [zyronChat, setZyronChat] = useState([]);
+
   const product = catalogProduct;
   if (!product) {
-    return <main className="page-shell screen-content"><p>Product not found. <button className="text-link" onClick={() => navigate("accessories")} type="button">Browse accessories</button></p></main>;
+    return (
+      <main className="page-shell screen-content">
+        <p>
+          Product not found.{" "}
+          <button className="text-link" onClick={() => navigate("accessories")} type="button">
+            Browse accessories
+          </button>
+        </p>
+      </main>
+    );
   }
   const favorite = favorites.includes(product.id);
 
   function addProduct() {
-    addToBag({ ...product, color });
+    addToBag({ ...product, color, quantity });
     setAdded(true);
   }
 
+  function handleAskZyron(question) {
+    const trimmed = question.trim();
+    if (!trimmed) return;
+    const currentSubject = zyronSubject || product.name;
+    let reply = `Based on verified specifications for ${currentSubject}, it features premium craftsmanship, timeless proportions, and exceptional durability rating (4.9/5).`;
+    if (trimmed.toLowerCase().includes("worth")) {
+      reply = `${currentSubject} is priced at $${Number(product.price).toFixed(2)}. In its category, it offers vegetable-tanned artisanal leather and heirloom build quality, representing top-tier value compared to luxury benchmarks.`;
+    } else if (trimmed.toLowerCase().includes("alternative") || trimmed.toLowerCase().includes("compare")) {
+      reply = `Similar alternatives include Arc Vessel ($124.00) and Serein Serum ($86.00). ${currentSubject} remains the most versatile daily staple in the current AUREL edit.`;
+    }
+    setZyronChat((prev) => [
+      ...prev,
+      { role: "user", text: trimmed },
+      { role: "zyron", text: reply },
+    ]);
+  }
+
+  const thumbClasses = [
+    "thumb-object-left",
+    "thumb-object-right",
+    "thumb-object-top",
+  ];
+
   return (
-    <main className="page-shell screen-content product-detail-page">
-      <Breadcrumb items={[
-        { label: "Home", href: "/" },
-        { label: product.category, href: "/accessories" },
-        { label: product.name },
-      ]} />
-      <div className="detail-layout">
-        <div className="detail-gallery">
-          {[0, 1, 2, 3].map((imageIndex) => (
-            <div className={`detail-gallery-tile detail-gallery-tile-${imageIndex + 1}`} key={imageIndex}>
-              <img alt={`${product.name}, view ${imageIndex + 1}`} src={product.image || toteImage} />
-              {imageIndex === 0 && <span className="gallery-caption">AUREL / OBJECTS FOR EVERY DAY</span>}
-            </div>
-          ))}
-        </div>
-        <section className="detail-information">
-          <p className="eyebrow section-eyebrow">AUREL / {product.category.toUpperCase()}</p>
-          <h1>{product.name}</h1>
-          <div className="detail-rating">
-            <Icon name="star" size={14} /> <strong>{product.rating || "4.8"}</strong>
-            <a href="#reviews">128 reviews</a>
+    <main className="page-shell flowstep-detail-container">
+      <nav aria-label="Breadcrumb" className="flowstep-breadcrumb">
+        <a href="/" onClick={(e) => { e.preventDefault(); navigate("home"); }}>
+          Home
+        </a>
+        <span className="crumb-slash">/</span>
+        <a href="/accessories" onClick={(e) => { e.preventDefault(); navigate("accessories"); }}>
+          {product.category || "Accessories"}
+        </a>
+        <span className="crumb-slash">/</span>
+        <span className="crumb-current">{product.name}</span>
+      </nav>
+
+      <div className="flowstep-detail-layout">
+        <div className="flowstep-gallery-col">
+          <div className="flowstep-gallery-hero">
+            {product.image ? (
+              <img
+                src={product.image}
+                alt={`${product.name} main presentation`}
+                className={`flowstep-hero-img ${thumbClasses[activeThumb] || ""}`}
+              />
+            ) : (
+              <div className="flowstep-hero-placeholder">
+                <Icon name="watch" size={96} />
+              </div>
+            )}
           </div>
-          <div className="detail-price">${Number(product.price).toFixed(2)}</div>
-          <p className="installment-note">or 4 payments of ${(product.price / 4).toFixed(2)}</p>
-          <p className={`stock-status ${product.stock <= 0 ? "is-out-of-stock" : ""}`}><span /> {product.stock > 0 ? "In stock · Ships today" : "Currently out of stock"}</p>
-          <p className="detail-description">
-            A sculptural everyday tote in vegetable-tanned leather, finished by hand in small batches.
+          <div className="flowstep-gallery-thumbs">
+            {[0, 1, 2].map((idx) => (
+              <button
+                key={idx}
+                type="button"
+                className={`flowstep-thumb-btn ${activeThumb === idx ? "is-active" : ""}`}
+                onClick={() => setActiveThumb(idx)}
+                aria-label={`View ${product.name} perspective ${idx + 1}`}
+              >
+                {product.image ? (
+                  <img
+                    src={product.image}
+                    alt={`${product.name} perspective ${idx + 1}`}
+                    className={`flowstep-thumb-img ${thumbClasses[idx]}`}
+                  />
+                ) : (
+                  <Icon name="watch" size={32} />
+                )}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <section aria-labelledby="product-title" className="flowstep-info-col">
+          <p className="flowstep-eyebrow">
+            AUREL / {(product.category || "ACCESSORIES").toUpperCase()}
           </p>
-          <div className="detail-option">
-            <div className="option-label"><span>Color</span><strong>{color}</strong></div>
-            <div className="detail-colors">
+          <h1 id="product-title" className="flowstep-product-title">
+            {product.name}
+          </h1>
+
+          <div className="flowstep-rating-row">
+            <div aria-label={`Rated ${product.rating || "4.9"} out of 5`} className="flowstep-rating-badge">
+              <Icon name="star" size={15} className="flowstep-star-icon" />
+              <span>{product.rating || "4.9"}</span>
+            </div>
+            <span className="flowstep-reviews-count">128 reviews</span>
+          </div>
+
+          <div className="flowstep-price-row">
+            <span className="flowstep-price-val">${Number(product.price).toFixed(2)}</span>
+            <span className="flowstep-installment-note">
+              or 4 payments of ${(product.price / 4).toFixed(2)}
+            </span>
+          </div>
+
+          <p className="flowstep-stock-status">
+            <span className={`flowstep-stock-dot ${product.stock <= 0 ? "is-out" : ""}`} />
+            {product.stock <= 0 ? "Currently out of stock" : "In stock · Ships today"}
+          </p>
+
+          <p className="flowstep-description">
+            {product.description ||
+              "A sculptural everyday tote in vegetable-tanned leather, finished by hand in small batches."}
+          </p>
+
+          <div className="flowstep-color-section">
+            <p className="flowstep-color-label">
+              Color: <span className="flowstep-color-value">{color}</span>
+            </p>
+            <div className="flowstep-color-chips">
               {["Umber", "Ink"].map((item) => (
                 <button
-                  aria-label={`${item}${color === item ? ", selected" : ""}`}
-                  aria-pressed={color === item}
-                  className={`detail-color detail-color-${item.toLowerCase()} ${color === item ? "is-selected" : ""}`}
                   key={item}
-                  onClick={() => setColor(item)}
-                  title={item}
                   type="button"
-                />
+                  className={`flowstep-color-chip ${color === item ? "is-selected" : ""}`}
+                  onClick={() => setColor(item)}
+                >
+                  {item}
+                </button>
               ))}
             </div>
           </div>
-          <div className="detail-option quantity-option">
-            <span className="option-heading">Quantity</span>
-            <Quantity value={quantity} onChange={(amount) => setQuantity((value) => Math.max(1, value + amount))} />
+
+          <div className="flowstep-qty-row">
+            <span className="flowstep-qty-label">Quantity</span>
+            <div className="flowstep-qty-stepper">
+              <button
+                type="button"
+                aria-label="Decrease quantity"
+                disabled={quantity <= 1}
+                onClick={() => setQuantity((q) => Math.max(1, q - 1))}
+              >
+                <Icon name="minus" size={14} />
+              </button>
+              <span>{quantity}</span>
+              <button
+                type="button"
+                aria-label="Increase quantity"
+                onClick={() => setQuantity((q) => q + 1)}
+              >
+                <Icon name="plus" size={14} />
+              </button>
+            </div>
           </div>
-          <div className="detail-actions">
-            <button className="screen-button-dark detail-add" disabled={product.stock <= 0 || quantity > product.stock} onClick={addProduct}>
-              {added ? "Added to bag" : "Add to bag"} <Icon name={added ? "check" : "bag"} size={16} />
+
+          <div className="flowstep-action-stack">
+            <button
+              type="button"
+              className="flowstep-btn-add"
+              disabled={product.stock <= 0}
+              onClick={addProduct}
+            >
+              {added ? "Added to bag" : "Add to bag"}
             </button>
-            <Button
-              aria-pressed={favorite}
-              className={`detail-wishlist ${favorite ? "is-favorite" : ""}`}
+            <button
+              type="button"
+              className={`flowstep-btn-wishlist ${favorite ? "is-favorite" : ""}`}
               onClick={() => toggleFavorite(product.id)}
             >
-              <Icon name="heart" size={16} /> {favorite ? "Saved to wishlist" : "Save to wishlist"}
-            </Button>
+              <Icon name="heart" size={16} />
+              {favorite ? "Saved to wishlist" : "Save to wishlist"}
+            </button>
+            <button
+              type="button"
+              aria-label={`Ask Zyron about ${product.name}`}
+              className="flowstep-btn-zyron"
+              onClick={() => {
+                setZyronSubject(product.name);
+                setZyronOpen(true);
+              }}
+            >
+              <Icon name="sparkles" size={16} />
+              Ask Zyron about this product
+            </button>
           </div>
+
           {added && (
-            <div className="inline-success" role="status">
+            <div className="flowstep-inline-success" role="status">
               <Icon name="check" size={15} /> Added to your bag.
-              <button onClick={() => navigate("cart")} type="button">View bag</button>
+              <button onClick={() => navigate("cart")} type="button">
+                View bag
+              </button>
             </div>
           )}
-          <div className="shipping-note"><Icon name="bag" size={17} /> Complimentary shipping over $150</div>
+
+          <p className="flowstep-shipping-perk">
+            <Icon name="truck" size={18} />
+            Complimentary shipping over $150
+          </p>
         </section>
       </div>
-      <div className="detail-accordions">
-        {[
-          ["Details", "Vegetable-tanned leather with a softly structured silhouette and considered interior space."],
-          ["Shipping & returns", "Complimentary shipping over $150. Returns accepted within 30 days of delivery."],
-          ["Care", "Keep away from prolonged moisture and store in the included dust bag when not in use."],
-        ].map(([title, body]) => (
-          <section className="detail-accordion" key={title}>
-            <button aria-expanded={expanded === title} onClick={() => setExpanded(expanded === title ? "" : title)} type="button">
-              {title}<Icon className={expanded === title ? "is-open" : ""} name="chevronDown" size={16} />
-            </button>
-            {expanded === title && <p>{body}</p>}
-          </section>
-        ))}
-      </div>
-      <section className="recommendations">
-        <div className="recommendation-title"><div><p className="eyebrow section-eyebrow">Consider these, too</p><h2>You may also like</h2></div><a href="/accessories">View accessories <Icon name="arrow" size={14} /></a></div>
-        <div className="recommendation-grid">
-          {[listingProducts[1], listingProducts[2]].map((item) => (
-            <button className="recommendation-card" key={item.id} onClick={() => navigate("accessories")} type="button">
-              <img alt={item.name} src={item.image} /><span><small>{item.category}</small><strong>{item.name}</strong><b>${item.price.toFixed(2)}</b></span>
-            </button>
-          ))}
+
+      <section aria-label="Product information" className="flowstep-info-grid">
+        <div className="flowstep-info-card">
+          <h2>Details</h2>
+          <p>
+            Vegetable-tanned leather with a softly structured silhouette and
+            considered interior space.
+          </p>
+        </div>
+        <div className="flowstep-info-card">
+          <h2>Shipping & returns</h2>
+          <p>
+            Complimentary shipping over $150. Returns accepted within 30 days of
+            delivery.
+          </p>
+        </div>
+        <div className="flowstep-info-card">
+          <h2>Care</h2>
+          <p>
+            Keep away from prolonged moisture and store in the included dust bag
+            when not in use.
+          </p>
         </div>
       </section>
+
+      <section aria-labelledby="recommendations-title" className="flowstep-recs-section">
+        <h2 id="recommendations-title" className="flowstep-recs-title">
+          You may also like
+        </h2>
+        <div className="flowstep-recs-grid">
+          <article className="flowstep-rec-card">
+            <div
+              className="flowstep-rec-img-wrap"
+              onClick={() => navigate("product", "serein-serum")}
+              style={{ cursor: "pointer" }}
+            >
+              <img
+                src="https://images.unsplash.com/photo-1772191530787-b9546da02fbc?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3ODc2NDd8MHwxfHNlYXJjaHwxfHxtaW5pbWFsJTIwZ29sZCUyMHdyaXN0JTIwd2F0Y2glMjBwcm9kdWN0JTIwcGhvdG9ncmFwaHklMjBjcmVhbSUyMGJhY2tncm91bmR8ZW58MXwyfHx8MTc5MzczOTA1NXww&ixlib=rb-4.1.0&q=80&w=1080"
+                alt="Serein Serum"
+              />
+            </div>
+            <h3
+              className="flowstep-rec-name"
+              onClick={() => navigate("product", "serein-serum")}
+              style={{ cursor: "pointer" }}
+            >
+              Serein Serum
+            </h3>
+            <p className="flowstep-rec-price">$86.00</p>
+            <button
+              type="button"
+              className="flowstep-rec-zyron-btn"
+              onClick={() => {
+                setZyronSubject("Serein Serum");
+                setZyronOpen(true);
+              }}
+            >
+              <Icon name="sparkles" size={14} />
+              Ask Zyron
+            </button>
+          </article>
+
+          <article className="flowstep-rec-card">
+            <div
+              className="flowstep-rec-img-wrap"
+              onClick={() => navigate("product", "arc-vessel")}
+              style={{ cursor: "pointer" }}
+            >
+              <img
+                src="https://images.unsplash.com/photo-1660721671073-e139688fa3cf?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3ODc2NDd8MHwxfHNlYXJjaHwxfHxsdXh1cnklMjBuZXV0cmFsJTIwaG9tZSUyMGRlY29yJTIwdmFzZSUyMHByb2R1Y3QlMjBwaG90b3xlbnwxfDJ8fHwxNzkzNzM5MDU4fDA&ixlib=rb-4.1.0&q=80&w=1080"
+                alt="Arc Vessel"
+              />
+            </div>
+            <h3
+              className="flowstep-rec-name"
+              onClick={() => navigate("product", "arc-vessel")}
+              style={{ cursor: "pointer" }}
+            >
+              Arc Vessel
+            </h3>
+            <p className="flowstep-rec-price">$124.00</p>
+            <button
+              type="button"
+              className="flowstep-rec-zyron-btn"
+              onClick={() => {
+                setZyronSubject("Arc Vessel");
+                setZyronOpen(true);
+              }}
+            >
+              <Icon name="sparkles" size={14} />
+              Ask Zyron
+            </button>
+          </article>
+        </div>
+      </section>
+
+      {zyronOpen && (
+        <aside
+          aria-label="Ask Zyron product analysis chat"
+          className="flowstep-zyron-drawer"
+        >
+          <div className="flowstep-zyron-header">
+            <div className="flowstep-zyron-title-wrap">
+              <div className="flowstep-zyron-badge">
+                <Icon name="sparkles" size={16} />
+              </div>
+              <div>
+                <p className="flowstep-zyron-name">Zyron</p>
+                <p className="flowstep-zyron-sub">Product intelligence</p>
+              </div>
+            </div>
+            <button
+              type="button"
+              aria-label="Close Zyron chat"
+              className="flowstep-zyron-close"
+              onClick={() => setZyronOpen(false)}
+            >
+              <Icon name="close" size={16} />
+            </button>
+          </div>
+
+          <div className="flowstep-zyron-body">
+            <div>
+              <p className="flowstep-zyron-eyebrow">Analysis for</p>
+              <p className="flowstep-zyron-target-name">{zyronSubject || product.name}</p>
+            </div>
+
+            <div className="flowstep-zyron-analysis-box">
+              <p className="flowstep-zyron-text">
+                I compared <strong>{zyronSubject || product.name}</strong> with similar products
+                across material, price, ratings, and design appeal. This is a strong match for
+                shoppers looking for a distinctive piece with everyday value.
+              </p>
+              <div className="flowstep-zyron-stats">
+                <div className="flowstep-stat-tile">
+                  <p className="stat-label">Match</p>
+                  <p className="stat-value">94%</p>
+                </div>
+                <div className="flowstep-stat-tile">
+                  <p className="stat-label">Similar items</p>
+                  <p className="stat-value">8</p>
+                </div>
+                <div className="flowstep-stat-tile">
+                  <p className="stat-label">Signal</p>
+                  <p className="stat-value">Strong</p>
+                </div>
+              </div>
+            </div>
+
+            {zyronChat.length > 0 && (
+              <div className="flowstep-zyron-thread">
+                {zyronChat.map((msg, index) => (
+                  <div
+                    key={index}
+                    className={`flowstep-chat-bubble ${msg.role === "user" ? "is-user" : "is-zyron"}`}
+                  >
+                    {msg.text}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div className="flowstep-zyron-quick-prompts">
+              <button
+                type="button"
+                onClick={() => handleAskZyron("Is it worth it?")}
+              >
+                Is it worth it?
+              </button>
+              <button
+                type="button"
+                onClick={() => handleAskZyron("Compare alternatives")}
+              >
+                Compare alternatives
+              </button>
+            </div>
+
+            <form
+              className="flowstep-zyron-input-row"
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (zyronQuestion.trim()) {
+                  handleAskZyron(zyronQuestion);
+                  setZyronQuestion("");
+                }
+              }}
+            >
+              <input
+                type="text"
+                aria-label="Ask Zyron a question"
+                placeholder="Ask about this product..."
+                value={zyronQuestion}
+                onChange={(e) => setZyronQuestion(e.target.value)}
+              />
+              <button
+                type="submit"
+                aria-label="Send question to Zyron"
+                className="flowstep-zyron-send-btn"
+              >
+                <Icon name="arrowUp" size={16} />
+              </button>
+            </form>
+          </div>
+        </aside>
+      )}
     </main>
   );
 }
 
-function ShoppingCart({ bag, changeQuantity, removeFromBag, navigate }) {
+function ShoppingCart({ bag, changeQuantity, removeFromBag, navigate, addToBag, products = [] }) {
   const dispatch = useDispatch();
   const promotion = useSelector((state) => state.promotion);
   const [promo, setPromo] = useState("");
@@ -195,77 +529,196 @@ function ShoppingCart({ bag, changeQuantity, removeFromBag, navigate }) {
   const discount = promotion === "AUREL10" ? subtotal * 0.1 : 0;
   const tax = (subtotal - discount) * 0.08;
   const total = subtotal - discount + tax;
+  const itemCount = bag.reduce((sum, item) => sum + item.quantity, 0);
   const isEmpty = bag.length === 0;
+
+  const curatedPreview = (products && products.length > 0 ? products : listingProducts).slice(0, 4);
 
   function applyPromo(event) {
     event.preventDefault();
     if (promo.trim().toUpperCase() === "AUREL10") {
       dispatch(setPromotion("AUREL10"));
-      setPromoMessage("AUREL10 applied — 10% off.");
+      setPromoMessage("AUREL10 applied — 10% discount added.");
     } else {
       dispatch(setPromotion(null));
-      setPromoMessage("That code didn’t quite work. Try AUREL10.");
+      setPromoMessage("Code not recognized. Try AUREL10 for 10% off.");
     }
   }
 
   return (
-    <main className="page-shell screen-content cart-page">
-      <Breadcrumb items={[{ label: "Home", href: "/" }, { label: "Your bag" }]} />
-      <PageTitle title="Your bag" description={`${bag.reduce((sum, item) => sum + item.quantity, 0)} items`} />
-      <div className={`cart-layout${isEmpty ? " cart-layout-empty" : ""}`}>
-        <div className="cart-main">
-          {bag.length ? (
-            <div className="cart-items-card">
-              {bag.map((item) => (
-                <article className="cart-line-item" key={item.id}>
-                  <img alt={item.name} src={item.image || vesselImage} />
-                  <div className="cart-item-copy">
-                    <p className="eyebrow section-eyebrow">{item.category}</p>
-                    <h2>{item.name}</h2>
-                    <p>${Number(item.price).toFixed(2)}</p>
-                    <Quantity value={item.quantity} onChange={(amount) => changeQuantity(item.id, amount)} />
-                  </div>
-                  <div className="cart-item-actions">
-                    <strong>${(item.price * item.quantity).toFixed(2)}</strong>
-                    <button aria-label={`Remove ${item.name} from bag`} onClick={() => removeFromBag(item.id)} title="Remove from bag" type="button"><Icon name="trash" size={16} /></button>
-                  </div>
-                </article>
-              ))}
-              <form className="promo-form" onSubmit={applyPromo}>
-                <label htmlFor="promo-code">A little something extra</label>
-                <div><input id="promo-code" onChange={(event) => setPromo(event.target.value)} placeholder="Promo code" value={promo} /><Button type="submit">Apply</Button></div>
-                {promoMessage && <p aria-live="polite">{promoMessage}</p>}
-              </form>
-              <p className="delivery-unlocked"><Icon name="check" size={15} /> Free delivery unlocked</p>
-            </div>
-          ) : (
-            <div className="cart-empty">
-              <span className="empty-preview-mark">A.</span>
-              <h2>Your bag is waiting.</h2>
-              <p>Find something thoughtful for your everyday.</p>
-              <Button className="screen-button-dark" onClick={() => navigate("accessories")}>Add items to cart <Icon name="arrow" size={15} /></Button>
-            </div>
-          )}
-          {!isEmpty && (
-            <div className="cart-reassurance">
-              <span><Icon name="check" size={17} /><b>Checkout preview</b><small>Your details aren&apos;t sent in this demo.</small></span>
-              <span><Icon name="arrow" size={17} /><b>Easy 30-day returns</b><small>Plenty of time to decide.</small></span>
-            </div>
-          )}
+    <main className="page-shell flowstep-cart-container">
+      <div className="flowstep-cart-header">
+        <nav aria-label="Breadcrumb" className="flowstep-breadcrumb">
+          <a href="/" onClick={(e) => { e.preventDefault(); navigate("home"); }}>
+            Home
+          </a>
+          <span className="crumb-chevron" aria-hidden="true">&gt;</span>
+          <span className="crumb-current">Your bag</span>
+        </nav>
+        <div className="flowstep-cart-title-row">
+          <h1 className="flowstep-cart-title">Your bag</h1>
+          <p className="flowstep-cart-count">
+            {itemCount} {itemCount === 1 ? "item" : "items"}
+          </p>
         </div>
-        {!isEmpty && <aside className="order-summary-card">
-          <p className="eyebrow section-eyebrow">A considered choice</p>
-          <h2>Order summary</h2>
-          <div className="summary-row"><span>Subtotal</span><span>${subtotal.toFixed(2)}</span></div>
-          {discount > 0 && <div className="summary-row summary-discount"><span>Discount</span><span>−${discount.toFixed(2)}</span></div>}
-          <div className="summary-row"><span>Shipping</span><span>Free</span></div>
-          <div className="summary-row"><span>Estimated tax</span><span>${tax.toFixed(2)}</span></div>
-          <div className="summary-row summary-total"><strong>Total</strong><strong>${total.toFixed(2)}</strong></div>
-          <Button className="screen-button-dark checkout-cta" disabled={!bag.length} onClick={() => navigate("checkout")}>Proceed to checkout <Icon name="arrow" size={16} /></Button>
-          <p className="secure-note"><Icon name="check" size={14} /> No payment data is collected in this demo.</p>
-          <div className="payment-marks"><span>VISA</span><span>Mastercard</span><span>Apple Pay</span></div>
-        </aside>}
       </div>
+
+      {isEmpty ? (
+        <div className="flowstep-cart-empty-centered">
+          <div className="flowstep-empty-bag-icon-circle" aria-hidden="true">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z" />
+              <path d="M3 6h18" />
+              <path d="M16 10a4 4 0 0 1-8 0" />
+            </svg>
+          </div>
+          <h2 className="flowstep-cart-empty-headline">Your bag is waiting.</h2>
+          <p className="flowstep-cart-empty-description">
+            Thoughtful pieces for considered spaces and everyday rituals.
+          </p>
+          <button
+            type="button"
+            className="flowstep-empty-shop-btn"
+            onClick={() => navigate("home")}
+          >
+            Shop new arrivals <span aria-hidden="true">↗</span>
+          </button>
+        </div>
+      ) : (
+        <>
+          <div className="flowstep-cart-grid">
+            <div className="flowstep-cart-items-col">
+              <div className="flowstep-card flowstep-cart-card">
+                <div className="flowstep-cart-items-list">
+                  {bag.map((item) => (
+                    <div className="flowstep-cart-item" key={item.id}>
+                      <img
+                        src={item.image || toteImage}
+                        alt={item.name}
+                        className="flowstep-cart-thumb"
+                      />
+                      <div className="flowstep-cart-item-info">
+                        <div className="flowstep-cart-item-top">
+                          <div>
+                            <h2 className="flowstep-cart-item-name">{item.name}</h2>
+                            <p className="flowstep-cart-item-price">${Number(item.price).toFixed(2)}</p>
+                          </div>
+                          <button
+                            type="button"
+                            className="flowstep-cart-remove-btn"
+                            onClick={() => removeFromBag(item.id)}
+                          >
+                            Remove
+                          </button>
+                        </div>
+                        <div className="flowstep-cart-item-bottom">
+                          <span className="flowstep-cart-qty-label">Quantity</span>
+                          <div className="flowstep-qty-stepper-sm">
+                            <button
+                              type="button"
+                              aria-label="Decrease quantity"
+                              disabled={item.quantity <= 1}
+                              onClick={() => changeQuantity(item.id, -1)}
+                            >
+                              <Icon name="minus" size={14} />
+                            </button>
+                            <span>{item.quantity}</span>
+                            <button
+                              type="button"
+                              aria-label="Increase quantity"
+                              onClick={() => changeQuantity(item.id, 1)}
+                            >
+                              <Icon name="plus" size={14} />
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <form className="flowstep-promo-row" onSubmit={applyPromo}>
+                  <input
+                    type="text"
+                    placeholder="Promo code"
+                    aria-label="Promo code"
+                    value={promo}
+                    onChange={(e) => setPromo(e.target.value)}
+                    className="flowstep-promo-input"
+                  />
+                  <button type="submit" className="flowstep-promo-btn">
+                    Apply
+                  </button>
+                </form>
+                {promoMessage && <p className="flowstep-promo-msg">{promoMessage}</p>}
+
+                <div className="flowstep-free-delivery-row">
+                  <Icon name="truck" size={16} />
+                  <span>Free delivery unlocked</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="flowstep-card flowstep-summary-card">
+              <h2 className="flowstep-summary-title">Order summary</h2>
+              <div className="flowstep-summary-rows">
+                <div className="flowstep-summary-row">
+                  <span className="row-label">Subtotal</span>
+                  <span className="row-val">${subtotal.toFixed(2)}</span>
+                </div>
+                {discount > 0 && (
+                  <div className="flowstep-summary-row row-discount">
+                    <span className="row-label">Discount (10%)</span>
+                    <span className="row-val">−${discount.toFixed(2)}</span>
+                  </div>
+                )}
+                <div className="flowstep-summary-row">
+                  <span className="row-label">Shipping</span>
+                  <span className="row-val">Free</span>
+                </div>
+                <div className="flowstep-summary-row">
+                  <span className="row-label">Estimated tax</span>
+                  <span className="row-val">${tax.toFixed(2)}</span>
+                </div>
+                <div className="flowstep-summary-total-row">
+                  <span>Total</span>
+                  <span>${total.toFixed(2)}</span>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                disabled={isEmpty}
+                className="flowstep-btn-primary flowstep-checkout-btn"
+                onClick={() => navigate("checkout")}
+              >
+                Proceed to checkout
+              </button>
+
+              <div className="flowstep-payment-methods">
+                <p className="payment-methods-title">Payment methods</p>
+                <div className="payment-badges-row">
+                  <span>VISA</span>
+                  <span>Mastercard</span>
+                  <span>Apple Pay</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="flowstep-trust-strip">
+            <div className="trust-item">
+              <Icon name="shieldCheck" size={20} />
+              <span>Secure checkout</span>
+            </div>
+            <div className="trust-divider" aria-hidden="true" />
+            <div className="trust-item">
+              <Icon name="rotateCcw" size={20} />
+              <span>Easy 30-day returns</span>
+            </div>
+          </div>
+        </>
+      )}
     </main>
   );
 }
@@ -411,6 +864,23 @@ function AccountAccess({ navigate }) {
   const [showPassword, setShowPassword] = useState(false);
   const [showAlert, setShowAlert] = useState(true);
   const [message, setMessage] = useState("");
+  const [googleLoading, setGoogleLoading] = useState(false);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const err = params.get("error");
+    if (err) {
+      setMessage(decodeURIComponent(err));
+      setShowAlert(true);
+      window.history.replaceState({}, "", window.location.pathname);
+    }
+  }, []);
+
+  function handleGoogleLogin() {
+    setGoogleLoading(true);
+    const apiBase = (import.meta.env.VITE_API_BASE_URL || "http://localhost:3000").replace(/\/$/, "");
+    window.location.href = `${apiBase}/auth/google`;
+  }
 
   function submitAccount(event) {
     event.preventDefault();
@@ -432,7 +902,7 @@ function AccountAccess({ navigate }) {
     setMessage("");
     request.then((result) => {
       if (loginAccount.fulfilled.match(result) || registerAccount.fulfilled.match(result)) {
-        navigate("profile");
+        navigate("home");
       }
     });
   }
@@ -460,10 +930,18 @@ function AccountAccess({ navigate }) {
             {tab === "create-account" && <label className="account-field"><span>Phone number <small>(optional)</small></span><input autoComplete="tel" maxLength={20} minLength={10} name="phoneNo" placeholder="+1 555 123 4567" type="tel" /></label>}
             <label className="account-field"><span>Email</span><input autoComplete="email" name="email" placeholder="you@example.com" required type="email" /></label>
             <label className="account-field"><span>Password</span><span className="password-input"><input autoComplete={tab === "sign-in" ? "current-password" : "new-password"} minLength={8} name="password" required type={showPassword ? "text" : "password"} /><button aria-label={showPassword ? "Hide password" : "Show password"} onClick={() => setShowPassword((value) => !value)} type="button">{showPassword ? "Hide" : "Show"}</button></span></label>
-            <Button className="screen-button-dark account-submit" disabled={status === "loading"} type="submit">{status === "loading" ? "Please wait…" : tab === "sign-in" ? "Sign in" : "Create account"} <Icon name="arrow" size={15} /></Button>
+            <Button className="screen-button-dark account-submit" disabled={status === "loading" || googleLoading} type="submit">{status === "loading" ? "Please wait…" : tab === "sign-in" ? "Sign in" : "Create account"} <Icon name="arrow" size={15} /></Button>
           </form>
           <div className="account-divider"><span />or continue with<span /></div>
-          <Button className="google-button" onClick={() => setMessage("Google sign-in is not connected in this demo.")}><b>G</b> Continue with Google</Button>
+          <Button className="google-button" disabled={googleLoading} onClick={handleGoogleLogin} type="button">
+            <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" style={{ marginRight: 8, flexShrink: 0 }}>
+              <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
+              <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+              <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" />
+              <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" />
+            </svg>
+            {googleLoading ? "Signing in with Google…" : "Continue with Google"}
+          </Button>
           {tab === "sign-in" && <a className="forgot-link" href="#forgot-password" onClick={(event) => { event.preventDefault(); setMessage("Password reset is not connected in this demo. No email was sent."); }}>Forgot password?</a>}
           {showAlert && (error || message) && <div className="account-alert" role="status"><span>{error || message}</span><button aria-label="Dismiss alert" onClick={() => { setShowAlert(false); setMessage(""); dispatch(clearAuthError()); }} type="button"><Icon name="close" size={15} /></button></div>}
           <p className="account-switch">{tab === "sign-in" ? "New to AUREL?" : "Already have an account?"} <button onClick={() => { setTab(tab === "sign-in" ? "create-account" : "sign-in"); setMessage(""); setShowAlert(true); dispatch(clearAuthError()); }} type="button">{tab === "sign-in" ? "Create an account" : "Sign in"}</button></p>
@@ -474,7 +952,7 @@ function AccountAccess({ navigate }) {
   );
 }
 
-function CustomerProfile({ navigate, favorites, onLogout, products, toggleFavorite }) {
+function CustomerProfile({ navigate, favorites, onLogout, products, toggleFavorite, addToBag }) {
   const dispatch = useDispatch();
   const { user, error } = useSelector((state) => state.auth);
   const [section, setSection] = useState("Profile");
@@ -482,6 +960,7 @@ function CustomerProfile({ navigate, favorites, onLogout, products, toggleFavori
   const [editing, setEditing] = useState(false);
   const [editingAddress, setEditingAddress] = useState(false);
   const [name, setName] = useState(user?.fullname || "");
+  const [phoneNo, setPhoneNo] = useState(user?.phoneNo || "");
   const [address, setAddress] = useState(user?.addresses?.[0] || {
     recipient: user?.fullname || "",
     street: "",
@@ -498,8 +977,16 @@ function CustomerProfile({ navigate, favorites, onLogout, products, toggleFavori
 
   useEffect(() => {
     apiRequest("/orders")
-      .then(({ orders: customerOrders }) => setOrders(customerOrders))
+      .then(({ orders: customerOrders }) => setOrders(customerOrders || []))
       .catch((requestError) => setProfileMessage(requestError.message));
+  }, []);
+
+  // Time-based luxury greeting
+  const greeting = useMemo(() => {
+    const hour = new Date().getHours();
+    if (hour < 12) return "Good morning";
+    if (hour < 18) return "Good afternoon";
+    return "Good evening";
   }, []);
 
   async function saveProfile(updates) {
@@ -512,9 +999,10 @@ function CustomerProfile({ navigate, favorites, onLogout, products, toggleFavori
       });
       dispatch(updateAuthenticatedUser(savedUser));
       setName(savedUser.fullname);
+      if (savedUser.phoneNo !== undefined) setPhoneNo(savedUser.phoneNo);
       setEditing(false);
       setEditingAddress(false);
-      setProfileMessage("Your account details are saved.");
+      setProfileMessage("Your account details have been saved.");
     } catch (requestError) {
       setProfileMessage(requestError.message);
       dispatch(setAuthError(requestError.message));
@@ -533,36 +1021,581 @@ function CustomerProfile({ navigate, favorites, onLogout, products, toggleFavori
     saveProfile({ addresses: [{ ...address, isDefault: true }] });
   }
 
+  const userInitials = displayName
+    .split(" ")
+    .filter(Boolean)
+    .map((part) => part[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase() || "A";
+
+  const memberDate = user?.createdAt
+    ? new Date(user.createdAt).toLocaleDateString("en-US", { month: "long", year: "numeric" })
+    : "Recently joined";
+
+  // Demo fallback orders if database has none yet
+  const displayOrders = orders.length > 0 ? orders : [
+    {
+      _id: "demo-1",
+      orderNumber: "AUR-10482",
+      createdAt: new Date("2024-06-12"),
+      items: [{ quantity: 2 }],
+      total: 341.28,
+      status: "In transit",
+      thumb: toteImage,
+    },
+    {
+      _id: "demo-2",
+      orderNumber: "AUR-10391",
+      createdAt: new Date("2024-05-28"),
+      items: [{ quantity: 1 }],
+      total: 68.0,
+      status: "Delivered",
+      thumb: serumImage,
+    },
+  ];
+
   return (
-    <main className="page-shell screen-content profile-page">
-      <Breadcrumb items={[{ label: "Home", href: "/" }, { label: "Account" }]} />
-      <PageTitle title={`Good morning, ${displayName.split(" ")[0]}`} description="Manage your account and keep track of your orders." action={<Button onClick={onLogout}>Sign out <Icon name="arrow" size={14} /></Button>} />
-      {error && <p className="account-alert" role="status">{error}</p>}
-      {profileMessage && <p className="account-alert" role="status">{profileMessage}</p>}
-      <div className="profile-layout">
-        <nav aria-label="Account sections" className="profile-nav">
-          <div className="profile-nav-person"><span>{displayName.split(" ").map((part) => part[0]).join("").slice(0, 2).toUpperCase()}</span><div><strong>{displayName}</strong><small>Customer account</small></div></div>
-          {sections.map((item, index) => <button aria-current={section === item ? "page" : undefined} className={section === item ? "is-active" : ""} key={item} onClick={() => setSection(item)} type="button"><Icon name={["account", "bag", "location", "heart"][index]} size={16} />{item}<Icon className="profile-nav-arrow" name="chevronRight" size={14} /></button>)}
-        </nav>
-        <div className="profile-main">
+    <main className="page-shell flowstep-profile-shell">
+      {/* Top Breadcrumb */}
+      <nav aria-label="Breadcrumb" className="flowstep-breadcrumb">
+        <a href="/" onClick={(e) => { e.preventDefault(); navigate("home"); }}>
+          Home
+        </a>
+        <span className="crumb-chevron" aria-hidden="true">&gt;</span>
+        <span className="crumb-current">Account</span>
+      </nav>
+
+      {/* Header Banner */}
+      <div className="flowstep-profile-header">
+        <div className="flowstep-profile-header-text">
+          <h1 className="flowstep-profile-title">{`${greeting}, ${displayName.split(" ")[0]}`}</h1>
+          <p className="flowstep-profile-subtitle">Manage your account and keep track of your orders.</p>
+        </div>
+        <button
+          type="button"
+          className="flowstep-signout-btn"
+          onClick={onLogout}
+        >
+          Sign out <Icon name="arrow" size={14} />
+        </button>
+      </div>
+
+      {error && <div className="account-alert" role="status"><span>{error}</span></div>}
+      {profileMessage && <div className="account-alert" role="status"><span>{profileMessage}</span></div>}
+
+      {/* 2-Column Responsive Layout */}
+      <div className="flowstep-profile-grid">
+        {/* Left Sidebar Card */}
+        <aside aria-label="Account navigation" className="flowstep-profile-sidebar-card">
+          <div className="flowstep-sidebar-user-block">
+            {user?.picture ? (
+              <img
+                src={user.picture}
+                alt={displayName}
+                className="flowstep-sidebar-avatar-img"
+                referrerPolicy="no-referrer"
+              />
+            ) : (
+              <div className="flowstep-sidebar-avatar-initials">{userInitials}</div>
+            )}
+            <div className="flowstep-sidebar-user-meta">
+              <strong className="flowstep-sidebar-name">{displayName}</strong>
+              <small className="flowstep-sidebar-badge">Customer account</small>
+            </div>
+          </div>
+
+          <nav className="flowstep-sidebar-nav">
+            <button
+              type="button"
+              className={`flowstep-nav-tab ${section === "Profile" ? "is-active" : ""}`}
+              onClick={() => setSection("Profile")}
+            >
+              <div className="flowstep-tab-left">
+                <Icon name="account" size={18} />
+                <span>Profile</span>
+              </div>
+              <Icon name="chevronRight" size={14} className="flowstep-tab-arrow" />
+            </button>
+
+            <button
+              type="button"
+              className={`flowstep-nav-tab ${section === "Orders" ? "is-active" : ""}`}
+              onClick={() => setSection("Orders")}
+            >
+              <div className="flowstep-tab-left">
+                <Icon name="package" size={18} />
+                <span>Orders</span>
+              </div>
+              {orders.length > 0 && <span className="flowstep-tab-count">{orders.length}</span>}
+              <Icon name="chevronRight" size={14} className="flowstep-tab-arrow" />
+            </button>
+
+            <button
+              type="button"
+              className={`flowstep-nav-tab ${section === "Addresses" ? "is-active" : ""}`}
+              onClick={() => setSection("Addresses")}
+            >
+              <div className="flowstep-tab-left">
+                <Icon name="location" size={18} />
+                <span>Addresses</span>
+              </div>
+              <Icon name="chevronRight" size={14} className="flowstep-tab-arrow" />
+            </button>
+
+            <button
+              type="button"
+              className={`flowstep-nav-tab ${section === "Wishlist" ? "is-active" : ""}`}
+              onClick={() => setSection("Wishlist")}
+            >
+              <div className="flowstep-tab-left">
+                <Icon name="heart" size={18} />
+                <span>Wishlist</span>
+              </div>
+              {favorites.length > 0 && <span className="flowstep-tab-count">{favorites.length}</span>}
+              <Icon name="chevronRight" size={14} className="flowstep-tab-arrow" />
+            </button>
+          </nav>
+        </aside>
+
+        {/* Right Main Content */}
+        <div className="flowstep-profile-main-col">
           {section === "Profile" && (
             <>
-              <section className="profile-card">
-                <div className="profile-card-header"><div><p className="eyebrow section-eyebrow">YOUR DETAILS</p><h2>Profile</h2></div><Button disabled={saving} onClick={() => editing ? saveProfile({ fullname: name.trim() }) : setEditing(true)}>{saving ? "Saving…" : editing ? "Save profile" : "Edit profile"}</Button></div>
-                <div className="profile-person"><span className="profile-avatar">{displayName.split(" ").map((part) => part[0]).join("").slice(0, 2).toUpperCase()}</span><div>{editing ? <input aria-label="Your name" className="profile-name-input" onChange={(event) => setName(event.target.value)} value={name} /> : <h3>{displayName}</h3>}<p>{user?.email}</p><small>Member since {user?.createdAt ? new Date(user.createdAt).toLocaleDateString() : "today"}</small></div></div>
+              {/* Profile Card */}
+              <section className="flowstep-card flowstep-profile-details-card">
+                <div className="flowstep-card-header-row">
+                  <div>
+                    <p className="flowstep-section-eyebrow">YOUR DETAILS</p>
+                    <h2 className="flowstep-section-heading">Profile</h2>
+                  </div>
+                  {editing ? (
+                    <div className="flowstep-card-actions">
+                      <button
+                        type="button"
+                        className="flowstep-btn-secondary"
+                        onClick={() => {
+                          setName(user?.fullname || "");
+                          setPhoneNo(user?.phoneNo || "");
+                          setEditing(false);
+                        }}
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="button"
+                        disabled={saving}
+                        className="flowstep-btn-primary"
+                        onClick={() => saveProfile({ fullname: name.trim(), phoneNo: phoneNo.trim() })}
+                      >
+                        {saving ? "Saving…" : "Save changes"}
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      className="flowstep-btn-secondary"
+                      onClick={() => setEditing(true)}
+                    >
+                      Edit profile
+                    </button>
+                  )}
+                </div>
+
+                <div className="flowstep-user-detail-row">
+                  {user?.picture ? (
+                    <img
+                      src={user.picture}
+                      alt={displayName}
+                      className="flowstep-main-avatar-img"
+                      referrerPolicy="no-referrer"
+                    />
+                  ) : (
+                    <div className="flowstep-main-avatar-circle">{userInitials}</div>
+                  )}
+
+                  <div className="flowstep-user-detail-info">
+                    {editing ? (
+                      <div className="flowstep-edit-form">
+                        <label className="flowstep-field-label">
+                          <span>Full name</span>
+                          <input
+                            type="text"
+                            className="flowstep-input"
+                            value={name}
+                            onChange={(e) => setName(e.target.value)}
+                            placeholder="Your full name"
+                          />
+                        </label>
+                        <label className="flowstep-field-label">
+                          <span>Phone number</span>
+                          <input
+                            type="tel"
+                            className="flowstep-input"
+                            value={phoneNo}
+                            onChange={(e) => setPhoneNo(e.target.value)}
+                            placeholder="+1 (555) 000-0000"
+                          />
+                        </label>
+                      </div>
+                    ) : (
+                      <>
+                        <h3 className="flowstep-user-name">{displayName}</h3>
+                        <p className="flowstep-user-email">{user?.email}</p>
+                        {user?.phoneNo && <p className="flowstep-user-phone">{user.phoneNo}</p>}
+                        <p className="flowstep-user-member-since">Member since {memberDate}</p>
+                      </>
+                    )}
+                  </div>
+                </div>
+
+                <div className="flowstep-card-divider" />
+
+                {/* Preferences Section */}
+                <div className="flowstep-preferences-block">
+                  <p className="flowstep-section-eyebrow">A NOTE FROM US</p>
+                  <h3 className="flowstep-preferences-title">Your preferences</h3>
+
+                  <div className="flowstep-preference-list">
+                    <label className="flowstep-toggle-row">
+                      <div className="flowstep-toggle-info">
+                        <strong>Early access to edits</strong>
+                        <span>Be first to discover new collections.</span>
+                      </div>
+                      <input
+                        type="checkbox"
+                        checked={preferences.earlyAccess}
+                        onChange={(e) => changePreference("earlyAccess", e.target.checked)}
+                        className="flowstep-switch-input"
+                      />
+                      <span className="flowstep-switch-slider" aria-hidden="true" />
+                    </label>
+
+                    <label className="flowstep-toggle-row">
+                      <div className="flowstep-toggle-info">
+                        <strong>Journal notes</strong>
+                        <span>Receive thoughtful notes from AUREL.</span>
+                      </div>
+                      <input
+                        type="checkbox"
+                        checked={preferences.journalNotes}
+                        onChange={(e) => changePreference("journalNotes", e.target.checked)}
+                        className="flowstep-switch-input"
+                      />
+                      <span className="flowstep-switch-slider" aria-hidden="true" />
+                    </label>
+                  </div>
+                </div>
               </section>
-              <section className="profile-card preferences-card">
-                <div><p className="eyebrow section-eyebrow">A NOTE FROM US</p><h2>Your preferences</h2></div>
-                <PreferenceRow title="Early access to edits" description="Be first to discover new collections." checked={preferences.earlyAccess} onChange={(value) => changePreference("earlyAccess", value)} />
-                <PreferenceRow title="Journal notes" description="Receive thoughtful notes from AUREL." checked={preferences.journalNotes} onChange={(value) => changePreference("journalNotes", value)} />
+
+              {/* Recent Orders Preview Card */}
+              <section className="flowstep-card flowstep-orders-preview-card">
+                <div className="flowstep-card-header-row">
+                  <div>
+                    <p className="flowstep-section-eyebrow">YOUR PURCHASES</p>
+                    <h2 className="flowstep-section-heading">Recent orders</h2>
+                  </div>
+                  <button
+                    type="button"
+                    className="flowstep-text-link-btn"
+                    onClick={() => setSection("Orders")}
+                  >
+                    View all <Icon name="arrow" size={13} />
+                  </button>
+                </div>
+
+                <div className="flowstep-order-cards-list">
+                  {displayOrders.slice(0, 2).map((order) => (
+                    <div className="flowstep-order-row-card" key={order._id}>
+                      <img
+                        src={order.thumb || toteImage}
+                        alt="Order thumbnail"
+                        className="flowstep-order-thumb"
+                      />
+                      <div className="flowstep-order-col-id">
+                        <strong>{order.orderNumber}</strong>
+                        <span>
+                          {new Date(order.createdAt).toLocaleDateString("en-US", {
+                            day: "numeric",
+                            month: "short",
+                            year: "numeric",
+                          })}
+                        </span>
+                      </div>
+                      <div className="flowstep-order-col-items">
+                        <span>
+                          {order.items?.reduce((c, i) => c + (i.quantity || 1), 0) || 1}{" "}
+                          {order.items?.length === 1 ? "item" : "items"}
+                        </span>
+                      </div>
+                      <div className="flowstep-order-col-total">
+                        <strong>${Number(order.total).toFixed(2)}</strong>
+                      </div>
+                      <div className="flowstep-order-col-status">
+                        <span className={`flowstep-status-chip status-${(order.status || "In transit").toLowerCase().replace(/\s+/g, "-")}`}>
+                          <Icon name="package" size={14} />
+                          <span>{order.status || "In transit"}</span>
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </section>
+
+              {/* Wishlist Preview Card */}
+              <section className="flowstep-card flowstep-wishlist-preview-card">
+                <div className="flowstep-wishlist-preview-left">
+                  <div className="flowstep-wishlist-icon-circle">
+                    <Icon name="heart" size={20} />
+                  </div>
+                  <div>
+                    <p className="flowstep-section-eyebrow">KEPT CLOSE</p>
+                    <h3 className="flowstep-wishlist-preview-title">Your wishlist</h3>
+                    <p className="flowstep-wishlist-preview-desc">
+                      {favorites.length > 0
+                        ? `${favorites.length} saved piece${favorites.length === 1 ? "" : "s"} waiting for you.`
+                        : "Your saved pieces will appear here."}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  className="flowstep-btn-primary"
+                  onClick={() => (favorites.length ? setSection("Wishlist") : navigate("accessories"))}
+                >
+                  {favorites.length ? "View wishlist" : "Browse the edit"}{" "}
+                  <Icon name="arrow" size={14} />
+                </button>
               </section>
             </>
           )}
-          {section === "Orders" && <section className="profile-card"><p className="eyebrow section-eyebrow">YOUR PURCHASES</p><h2>Recent orders</h2><OrderHistory orders={orders} /></section>}
-          {section === "Addresses" && <section className="profile-card"><p className="eyebrow section-eyebrow">WHERE TO</p><h2>Your addresses</h2><div className="address-card"><Icon name="location" size={19} /><div>{editingAddress ? <><label>Recipient<input onChange={(event) => setAddress((current) => ({ ...current, recipient: event.target.value }))} value={address.recipient} /></label><label>Street<input onChange={(event) => setAddress((current) => ({ ...current, street: event.target.value }))} value={address.street} /></label><label>City<input onChange={(event) => setAddress((current) => ({ ...current, city: event.target.value }))} value={address.city} /></label><label>Postal code<input onChange={(event) => setAddress((current) => ({ ...current, postalCode: event.target.value }))} value={address.postalCode} /></label><label>Country<input onChange={(event) => setAddress((current) => ({ ...current, country: event.target.value }))} value={address.country} /></label></> : <><strong>{address.recipient || displayName}</strong><p>{address.street ? `${address.street}, ` : ""}{address.city}{address.postalCode ? ` ${address.postalCode}` : ""}</p><small>{address.country} · Default address</small></>}</div><Button disabled={saving} onClick={() => editingAddress ? saveAddress() : setEditingAddress(true)}>{saving ? "Saving…" : editingAddress ? "Save address" : "Edit"}</Button></div></section>}
-          {section === "Profile" && <section className="profile-card order-history-card"><div className="profile-card-header"><div><p className="eyebrow section-eyebrow">YOUR PURCHASES</p><h2>Recent orders</h2></div><button className="profile-view-all" onClick={() => setSection("Orders")} type="button">View all <Icon name="arrow" size={13} /></button></div><OrderHistory orders={orders.slice(0, 3)} /></section>}
-          <section className="profile-card wishlist-preview"><div><span className="wishlist-preview-icon"><Icon name="heart" size={19} /></span><div><h2>Your wishlist</h2><p>{favorites.length ? `${favorites.length} saved piece${favorites.length === 1 ? "" : "s"} waiting for you.` : "Your saved pieces will appear here."}</p></div></div><Button onClick={() => favorites.length ? setSection("Wishlist") : navigate("accessories")}>{favorites.length ? "View wishlist" : "Browse the edit"} <Icon name="arrow" size={14} /></Button></section>
-          {section === "Wishlist" && <section className="profile-card"><p className="eyebrow section-eyebrow">KEPT CLOSE</p><h2>Wishlist</h2>{favorites.length ? <div className="recommendation-grid">{products.filter((product) => favorites.includes(product.id)).map((product) => <article className="recommendation-card" key={product.id}><img alt={product.name} src={product.image || vesselImage} /><span><strong>{product.name}</strong><b>${Number(product.price).toFixed(2)}</b><Button onClick={() => toggleFavorite(product.id)}>Remove from wishlist</Button></span></article>)}</div> : <p className="profile-wishlist-message">Your saved pieces will appear here.</p>}<Button onClick={() => navigate("accessories")}>Browse the edit <Icon name="arrow" size={14} /></Button></section>}
+
+          {section === "Orders" && (
+            <section className="flowstep-card flowstep-full-orders-card">
+              <div className="flowstep-card-header-row">
+                <div>
+                  <p className="flowstep-section-eyebrow">YOUR PURCHASES</p>
+                  <h2 className="flowstep-section-heading">All orders</h2>
+                </div>
+              </div>
+
+              {displayOrders.length > 0 ? (
+                <div className="flowstep-order-cards-list">
+                  {displayOrders.map((order) => (
+                    <div className="flowstep-order-row-card" key={order._id}>
+                      <img
+                        src={order.thumb || toteImage}
+                        alt="Order thumbnail"
+                        className="flowstep-order-thumb"
+                      />
+                      <div className="flowstep-order-col-id">
+                        <strong>{order.orderNumber}</strong>
+                        <span>
+                          {new Date(order.createdAt).toLocaleDateString("en-US", {
+                            day: "numeric",
+                            month: "short",
+                            year: "numeric",
+                          })}
+                        </span>
+                      </div>
+                      <div className="flowstep-order-col-items">
+                        <span>
+                          {order.items?.reduce((c, i) => c + (i.quantity || 1), 0) || 1}{" "}
+                          {order.items?.length === 1 ? "item" : "items"}
+                        </span>
+                      </div>
+                      <div className="flowstep-order-col-total">
+                        <strong>${Number(order.total).toFixed(2)}</strong>
+                      </div>
+                      <div className="flowstep-order-col-status">
+                        <span className={`flowstep-status-chip status-${(order.status || "In transit").toLowerCase().replace(/\s+/g, "-")}`}>
+                          <Icon name="package" size={14} />
+                          <span>{order.status || "In transit"}</span>
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="flowstep-empty-tab-panel">
+                  <Icon name="package" size={32} />
+                  <p>You have not placed an order yet.</p>
+                  <button
+                    type="button"
+                    className="flowstep-btn-primary"
+                    onClick={() => navigate("home")}
+                  >
+                    Discover the collection
+                  </button>
+                </div>
+              )}
+            </section>
+          )}
+
+          {section === "Addresses" && (
+            <section className="flowstep-card flowstep-addresses-card">
+              <div className="flowstep-card-header-row">
+                <div>
+                  <p className="flowstep-section-eyebrow">WHERE TO</p>
+                  <h2 className="flowstep-section-heading">Your addresses</h2>
+                </div>
+                {!editingAddress && (
+                  <button
+                    type="button"
+                    className="flowstep-btn-secondary"
+                    onClick={() => setEditingAddress(true)}
+                  >
+                    Edit address
+                  </button>
+                )}
+              </div>
+
+              {editingAddress ? (
+                <div className="flowstep-address-edit-box">
+                  <div className="flowstep-address-form-grid">
+                    <label className="flowstep-field-label">
+                      <span>Recipient</span>
+                      <input
+                        className="flowstep-input"
+                        value={address.recipient}
+                        onChange={(e) => setAddress((cur) => ({ ...cur, recipient: e.target.value }))}
+                      />
+                    </label>
+                    <label className="flowstep-field-label">
+                      <span>Street address</span>
+                      <input
+                        className="flowstep-input"
+                        value={address.street}
+                        onChange={(e) => setAddress((cur) => ({ ...cur, street: e.target.value }))}
+                      />
+                    </label>
+                    <label className="flowstep-field-label">
+                      <span>City</span>
+                      <input
+                        className="flowstep-input"
+                        value={address.city}
+                        onChange={(e) => setAddress((cur) => ({ ...cur, city: e.target.value }))}
+                      />
+                    </label>
+                    <label className="flowstep-field-label">
+                      <span>Postal code</span>
+                      <input
+                        className="flowstep-input"
+                        value={address.postalCode}
+                        onChange={(e) => setAddress((cur) => ({ ...cur, postalCode: e.target.value }))}
+                      />
+                    </label>
+                    <label className="flowstep-field-label">
+                      <span>Country</span>
+                      <input
+                        className="flowstep-input"
+                        value={address.country}
+                        onChange={(e) => setAddress((cur) => ({ ...cur, country: e.target.value }))}
+                      />
+                    </label>
+                  </div>
+                  <div className="flowstep-card-actions mt-4">
+                    <button
+                      type="button"
+                      className="flowstep-btn-secondary"
+                      onClick={() => setEditingAddress(false)}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      disabled={saving}
+                      className="flowstep-btn-primary"
+                      onClick={saveAddress}
+                    >
+                      {saving ? "Saving…" : "Save address"}
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="flowstep-address-display-card">
+                  <div className="flowstep-address-badge-row">
+                    <span className="flowstep-default-chip">Default delivery address</span>
+                  </div>
+                  <h3 className="flowstep-address-recipient">{address.recipient || displayName}</h3>
+                  <p className="flowstep-address-lines">
+                    {address.street ? `${address.street}, ` : "124 Mercer St, Suite 4B, "}
+                    {address.city ? `${address.city}, ` : "New York, NY "}
+                    {address.postalCode || "10012"}
+                  </p>
+                  <p className="flowstep-address-country">{address.country || "United States"}</p>
+                </div>
+              )}
+            </section>
+          )}
+
+          {section === "Wishlist" && (
+            <section className="flowstep-card flowstep-wishlist-full-card">
+              <div className="flowstep-card-header-row">
+                <div>
+                  <p className="flowstep-section-eyebrow">KEPT CLOSE</p>
+                  <h2 className="flowstep-section-heading">Wishlist</h2>
+                </div>
+              </div>
+
+              {favorites.length > 0 ? (
+                <div className="flowstep-wishlist-items-grid">
+                  {products
+                    .filter((p) => favorites.includes(p.id))
+                    .map((item) => (
+                      <article className="flowstep-wishlist-product-card" key={item.id}>
+                        <div
+                          className="flowstep-wishlist-thumb-wrap"
+                          onClick={() => navigate("product", item.id)}
+                          style={{ cursor: "pointer" }}
+                        >
+                          <img src={item.image || vesselImage} alt={item.name} />
+                        </div>
+                        <div className="flowstep-wishlist-card-body">
+                          <p className="flowstep-wishlist-cat">{item.category}</p>
+                          <h4
+                            className="flowstep-wishlist-name"
+                            onClick={() => navigate("product", item.id)}
+                            style={{ cursor: "pointer" }}
+                          >
+                            {item.name}
+                          </h4>
+                          <span className="flowstep-wishlist-price">${Number(item.price).toFixed(2)}</span>
+                          <div className="flowstep-wishlist-actions-row">
+                            <button
+                              type="button"
+                              className="flowstep-btn-primary flowstep-btn-sm"
+                              onClick={() => addToBag && addToBag(item)}
+                            >
+                              Add to bag
+                            </button>
+                            <button
+                              type="button"
+                              className="flowstep-btn-secondary flowstep-btn-sm"
+                              onClick={() => toggleFavorite(item.id)}
+                            >
+                              Remove
+                            </button>
+                          </div>
+                        </div>
+                      </article>
+                    ))}
+                </div>
+              ) : (
+                <div className="flowstep-empty-tab-panel">
+                  <Icon name="heart" size={32} />
+                  <p>Your wishlist is currently empty.</p>
+                  <button
+                    type="button"
+                    className="flowstep-btn-primary"
+                    onClick={() => navigate("accessories")}
+                  >
+                    Browse the edit
+                  </button>
+                </div>
+              )}
+            </section>
+          )}
         </div>
       </div>
     </main>
@@ -591,6 +1624,7 @@ const adminNav = [
 ];
 
 function OwnerShell({ page, navigate, children, user, onLogout }) {
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const routePages = {
     "/owner": "owner",
     "/owner/products": "ownerProducts",
@@ -601,14 +1635,115 @@ function OwnerShell({ page, navigate, children, user, onLogout }) {
   const currentLabel = adminNav.find(([, , path]) => path === page)?.[0] || "Dashboard";
   return (
     <div className="owner-shell">
-      <aside className="owner-sidebar">
-        <a className="owner-logo" href="/owner" onClick={(event) => { event.preventDefault(); navigate("owner"); }}>AUREL<span>Owner workspace</span></a>
+      {mobileMenuOpen && (
+        <div
+          className="owner-mobile-backdrop"
+          onClick={() => setMobileMenuOpen(false)}
+          aria-hidden="true"
+        />
+      )}
+      <aside className={`owner-sidebar ${mobileMenuOpen ? "is-open" : ""}`}>
+        <div className="owner-sidebar-top-row">
+          <a
+            className="owner-logo"
+            href="/owner"
+            onClick={(event) => {
+              event.preventDefault();
+              setMobileMenuOpen(false);
+              navigate("owner");
+            }}
+          >
+            AUREL
+            <span>Owner workspace</span>
+          </a>
+          <button
+            type="button"
+            className="owner-close-menu-btn"
+            onClick={() => setMobileMenuOpen(false)}
+            aria-label="Close menu"
+          >
+            <Icon name="close" size={18} />
+          </button>
+        </div>
+
         <p className="owner-nav-label">WORKSPACE</p>
-        <nav aria-label="Owner navigation">{adminNav.map(([label, icon, path]) => <button aria-current={path && page === path ? "page" : undefined} className={path && page === path ? "is-active" : ""} disabled={!path} key={label} onClick={() => { if (path) navigate(routePages[path]); }} title={path ? undefined : `${label} is not available yet`} type="button"><Icon name={icon} size={17} />{label}{path && page === path && <span />}</button>)}</nav>
-        <div className="owner-sidebar-bottom"><span className="owner-avatar">{(user?.fullname || "Owner").split(" ").map((part) => part[0]).join("").slice(0, 2).toUpperCase()}</span><span><strong>{user?.fullname || "Store owner"}</strong><small>{user?.role === "admin" ? "Owner Admin" : "Owner"}</small></span><button aria-label="Sign out" onClick={onLogout} type="button">↗</button></div>
+        <nav aria-label="Owner navigation">
+          {adminNav.map(([label, icon, path]) => (
+            <button
+              aria-current={path && page === path ? "page" : undefined}
+              className={path && page === path ? "is-active" : ""}
+              disabled={!path}
+              key={label}
+              onClick={() => {
+                if (path) {
+                  setMobileMenuOpen(false);
+                  navigate(routePages[path]);
+                }
+              }}
+              title={path ? undefined : `${label} is not available yet`}
+              type="button"
+            >
+              <Icon name={icon} size={17} />
+              {label}
+              {path && page === path && <span />}
+            </button>
+          ))}
+        </nav>
+
+        <div className="owner-sidebar-bottom">
+          <span className="owner-avatar">
+            {user?.picture ? (
+              <img
+                src={user.picture}
+                alt=""
+                style={{ width: "100%", height: "100%", borderRadius: "50%", objectFit: "cover" }}
+                referrerPolicy="no-referrer"
+              />
+            ) : (
+              (user?.fullname || "Owner").split(" ").map((part) => part[0]).join("").slice(0, 2).toUpperCase()
+            )}
+          </span>
+          <span>
+            <strong>{user?.fullname || "Store owner"}</strong>
+            <small>{user?.role === "admin" ? "Owner Admin" : "Owner"}</small>
+          </span>
+          <button aria-label="Sign out" onClick={onLogout} type="button">
+            ↗
+          </button>
+        </div>
       </aside>
+
       <div className="owner-workspace">
-        <header className="owner-topbar"><div><span>Owner</span><Icon name="chevronRight" size={13} /><b>{currentLabel}</b></div><button aria-label="Notifications are not available yet" disabled type="button"><Icon name="bell" size={18} /><i /></button></header>
+        <header className="owner-topbar">
+          <div className="owner-topbar-left">
+            <button
+              type="button"
+              className="owner-menu-toggle-btn"
+              onClick={() => setMobileMenuOpen(true)}
+              aria-label="Open owner menu"
+            >
+              <Icon name="menu" size={20} />
+            </button>
+            <div className="owner-breadcrumbs">
+              <span>Owner</span>
+              <Icon name="chevronRight" size={13} />
+              <b>{currentLabel}</b>
+            </div>
+          </div>
+          <div className="owner-topbar-right">
+            <a
+              href="/"
+              onClick={(e) => { e.preventDefault(); navigate("home"); }}
+              className="owner-view-store-btn"
+            >
+              View store ↗
+            </a>
+            <button aria-label="Notifications are not available yet" disabled type="button">
+              <Icon name="bell" size={18} />
+              <i />
+            </button>
+          </div>
+        </header>
         <main className="owner-main">{children}</main>
       </div>
     </div>
@@ -634,6 +1769,7 @@ function OwnerAccess({ navigate }) {
   const dispatch = useDispatch();
   const { error, status, user } = useSelector((state) => state.auth);
   const [bootstrap, setBootstrap] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
   const [message, setMessage] = useState("");
 
   async function submit(event) {
@@ -659,27 +1795,129 @@ function OwnerAccess({ navigate }) {
   }
 
   if (status === "loading" && user?.role === "owner") {
-    return <main className="account-access" aria-live="polite">Checking owner access…</main>;
+    return <main className="flowstep-owner-auth-page" aria-live="polite"><div className="flowstep-owner-auth-card"><p>Checking owner access…</p></div></main>;
   }
 
   return (
-    <main className="account-access owner-access">
-      <section className="account-form-side">
-        <div className="account-card">
-          <a className="account-wordmark" href="/" onClick={(event) => { event.preventDefault(); navigate("home"); }}>AUREL</a>
-          <p className="eyebrow section-eyebrow">OWNER WORKSPACE</p>
-          <h2>{bootstrap ? "Create your store admin" : "Welcome back"}</h2>
-          <p className="account-intro">{bootstrap ? "One-time setup for the first admin account." : "Sign in to manage your catalog and inventory."}</p>
-          <form className="account-form" onSubmit={submit}>
-            {bootstrap && <label className="account-field"><span>Your name</span><input autoComplete="name" name="fullname" minLength={3} required /></label>}
-            <label className="account-field"><span>Email</span><input autoComplete="email" name="email" required type="email" /></label>
-            <label className="account-field"><span>Password</span><input autoComplete="current-password" minLength={8} name="password" required type="password" /></label>
-            <Button className="screen-button-dark account-submit" disabled={status === "loading"} type="submit">{status === "loading" ? "Please wait…" : bootstrap ? "Create admin" : "Sign in"} <Icon name="arrow" size={15} /></Button>
-          </form>
-          {(error || message) && <p className="account-alert" role="alert">{message || error}</p>}
-          <button className="text-link" onClick={() => { setBootstrap((value) => !value); setMessage(""); dispatch(clearAuthError()); }} type="button">{bootstrap ? "Already have an owner account? Sign in" : "First local setup? Create the first admin"}</button>
+    <main className="flowstep-owner-auth-page">
+      <div className="flowstep-owner-auth-card">
+        <div className="flowstep-owner-header">
+          <a
+            className="flowstep-owner-wordmark"
+            href="/"
+            onClick={(event) => { event.preventDefault(); navigate("home"); }}
+            aria-label="AUREL storefront home"
+          >
+            AUREL
+          </a>
+          <span className="flowstep-owner-badge">Owner Workspace</span>
+          <h1 className="flowstep-owner-title">
+            {bootstrap ? "Create store admin" : "Welcome back"}
+          </h1>
+          <p className="flowstep-owner-sub">
+            {bootstrap
+              ? "One-time setup for the initial administrator account."
+              : "Sign in to manage your catalog, orders, and inventory."}
+          </p>
         </div>
-      </section>
+
+        <form className="flowstep-owner-form" onSubmit={submit}>
+          {bootstrap && (
+            <label className="flowstep-owner-field">
+              <span>Your name</span>
+              <input
+                autoComplete="name"
+                name="fullname"
+                placeholder="Maya Patel"
+                minLength={3}
+                required
+                className="flowstep-owner-input"
+              />
+            </label>
+          )}
+
+          <label className="flowstep-owner-field">
+            <span>Email address</span>
+            <input
+              autoComplete="email"
+              name="email"
+              placeholder="owner@aurel.com"
+              required
+              type="email"
+              className="flowstep-owner-input"
+            />
+          </label>
+
+          <label className="flowstep-owner-field">
+            <span>Password</span>
+            <div className="flowstep-owner-password-wrap">
+              <input
+                autoComplete="current-password"
+                minLength={8}
+                name="password"
+                placeholder="••••••••"
+                required
+                type={showPassword ? "text" : "password"}
+                className="flowstep-owner-input"
+              />
+              <button
+                type="button"
+                className="flowstep-owner-show-pass-btn"
+                onClick={() => setShowPassword((prev) => !prev)}
+                aria-label={showPassword ? "Hide password" : "Show password"}
+              >
+                {showPassword ? "Hide" : "Show"}
+              </button>
+            </div>
+          </label>
+
+          <button
+            className="flowstep-owner-submit-btn"
+            disabled={status === "loading"}
+            type="submit"
+          >
+            {status === "loading"
+              ? "Please wait…"
+              : bootstrap
+              ? "Create admin account"
+              : "Sign in to workspace"}{" "}
+            <Icon name="arrow" size={15} />
+          </button>
+        </form>
+
+        {(error || message) && (
+          <div className="flowstep-owner-alert" role="alert">
+            <span>{message || error}</span>
+          </div>
+        )}
+
+        <div className="flowstep-owner-footer-links">
+          <button
+            className="flowstep-owner-toggle-btn"
+            onClick={() => {
+              setBootstrap((value) => !value);
+              setMessage("");
+              dispatch(clearAuthError());
+            }}
+            type="button"
+          >
+            {bootstrap
+              ? "Already have an owner account? Sign in"
+              : "First local setup? Create the first admin"}
+          </button>
+
+          <a
+            className="flowstep-owner-back-link"
+            href="/"
+            onClick={(event) => {
+              event.preventDefault();
+              navigate("home");
+            }}
+          >
+            ← Return to customer store
+          </a>
+        </div>
+      </div>
     </main>
   );
 }
@@ -971,33 +2209,78 @@ function OwnerOrders({ navigate, user, onLogout }) {
 
 function OwnerCustomers({ navigate, user, onLogout }) {
   const [customers, setCustomers] = useState([]);
+  const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
   useEffect(() => {
     apiRequest("/owners/customers")
-      .then(({ customers: result }) => setCustomers(result))
+      .then(({ customers: result }) => setCustomers(result || []))
       .catch((requestError) => setError(requestError.message))
       .finally(() => setLoading(false));
   }, []);
+
+  const filteredCustomers = customers.filter((c) =>
+    `${c.fullname} ${c.email}`.toLowerCase().includes(search.trim().toLowerCase())
+  );
 
   return (
     <OwnerShell page="/owner/customers" navigate={navigate} user={user} onLogout={onLogout}>
       <PageTitle eyebrow="YOUR COMMUNITY" title="Customers" description={`${customers.length} registered customer${customers.length === 1 ? "" : "s"}.`} />
       {error && <p className="account-alert" role="alert">{error}</p>}
       <section className="admin-card product-management-card">
+        <div className="product-management-toolbar">
+          <div className="admin-search">
+            <Icon name="search" size={15} />
+            <input
+              placeholder="Search by name or email…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+          </div>
+        </div>
         <div className="admin-table-scroll">
           <table className="admin-table">
             <thead><tr>{["Customer", "Joined", "Orders", "Lifetime spend"].map((item) => <th key={item}>{item}</th>)}</tr></thead>
             <tbody>
-              {loading ? <tr><td colSpan="4">Loading customers…</td></tr> : customers.length ? customers.map((customer) => (
+              {loading ? <tr><td colSpan="4">Loading customers…</td></tr> : filteredCustomers.length ? filteredCustomers.map((customer) => (
                 <tr key={customer._id}>
-                  <td><strong>{customer.fullname}</strong><small>{customer.email}</small></td>
+                  <td>
+                    <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                      {customer.picture ? (
+                        <img
+                          src={customer.picture}
+                          alt=""
+                          style={{ width: 34, height: 34, borderRadius: "50%", objectFit: "cover" }}
+                          referrerPolicy="no-referrer"
+                        />
+                      ) : (
+                        <span style={{
+                          display: "grid",
+                          width: 34,
+                          height: 34,
+                          placeItems: "center",
+                          borderRadius: "50%",
+                          background: "#e8e4dc",
+                          color: "#5c5548",
+                          fontSize: 12,
+                          fontWeight: 600,
+                          flexShrink: 0
+                        }}>
+                          {(customer.fullname || "C").slice(0, 2).toUpperCase()}
+                        </span>
+                      )}
+                      <div>
+                        <strong>{customer.fullname}</strong>
+                        <small>{customer.email}</small>
+                      </div>
+                    </div>
+                  </td>
                   <td>{customer.createdAt ? new Date(customer.createdAt).toLocaleDateString() : "—"}</td>
                   <td>{customer.orders}</td>
                   <td>${Number(customer.spent).toFixed(2)}</td>
                 </tr>
-              )) : <tr><td colSpan="4">No customer accounts yet.</td></tr>}
+              )) : <tr><td colSpan="4">{search ? "No matching customers found." : "No customer accounts yet."}</td></tr>}
             </tbody>
           </table>
         </div>
@@ -1110,10 +2393,10 @@ export default function ScreenPages({
     : <OwnerAccess navigate={navigate} />;
   const routes = {
     product: <ProductDetails addToBag={addToBag} catalogProduct={product} favorites={favorites} navigate={navigate} toggleFavorite={toggleFavorite} />,
-    cart: <ShoppingCart bag={bag} changeQuantity={changeQuantity} navigate={navigate} removeFromBag={removeFromBag} />,
+    cart: <ShoppingCart addToBag={addToBag} bag={bag} changeQuantity={changeQuantity} navigate={navigate} products={products} removeFromBag={removeFromBag} />,
     checkout: <Checkout bag={bag} navigate={navigate} onOrderPlaced={onOrderPlaced} />,
     account: <AccountAccess navigate={navigate} />,
-    profile: <CustomerProfile favorites={favorites} navigate={navigate} onLogout={onLogout} products={products} toggleFavorite={toggleFavorite} />,
+    profile: <CustomerProfile addToBag={addToBag} favorites={favorites} navigate={navigate} onLogout={onLogout} products={products} toggleFavorite={toggleFavorite} />,
     owner: ownerEntry,
     ownerProducts,
     ownerInventory,

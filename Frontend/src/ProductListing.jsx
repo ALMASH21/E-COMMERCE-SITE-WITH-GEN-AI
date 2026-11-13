@@ -15,7 +15,7 @@ const priceMatches = {
 
 function ProductTile({ product, isFavorite, onToggleFavorite, onQuickAdd, onOpenProduct }) {
   return (
-    <article className="listing-product-card">
+    <article className="listing-product-card" onClick={onOpenProduct} style={{ cursor: "pointer" }}>
       <div className={`listing-product-image ${product.tile ? `tile-${product.tile}` : ""}`}>
         {product.image ? (
           <img alt={product.name} loading="lazy" src={product.image} />
@@ -35,19 +35,39 @@ function ProductTile({ product, isFavorite, onToggleFavorite, onQuickAdd, onOpen
           aria-label={`${isFavorite ? "Remove" : "Add"} ${product.name} ${isFavorite ? "from" : "to"} wishlist`}
           aria-pressed={isFavorite}
           className={`icon-button listing-favorite ${isFavorite ? "is-favorite" : ""}`}
-          onClick={() => onToggleFavorite(product.id)}
+          onClick={(e) => {
+            e.stopPropagation();
+            onToggleFavorite(product.id);
+          }}
           type="button"
         >
           <Icon name="heart" size={17} />
         </button>
-        <button className="listing-quick-add" disabled={product.stock <= 0} onClick={() => onQuickAdd(product)} type="button">
+        <button
+          className="listing-quick-add"
+          disabled={product.stock <= 0}
+          onClick={(e) => {
+            e.stopPropagation();
+            onQuickAdd(product);
+          }}
+          type="button"
+        >
           {product.stock <= 0 ? "Sold out" : "Quick add"} <Icon name="plus" size={15} />
         </button>
       </div>
       <div className="listing-product-meta">
         <div>
           <p>{product.category}</p>
-          <button className="listing-product-name" onClick={onOpenProduct} type="button">{product.name}</button>
+          <button
+            className="listing-product-name"
+            onClick={(e) => {
+              e.stopPropagation();
+              onOpenProduct();
+            }}
+            type="button"
+          >
+            {product.name}
+          </button>
         </div>
         <span className="listing-price">${product.price}</span>
       </div>

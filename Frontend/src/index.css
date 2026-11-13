@@ -11,12 +11,26 @@
 
   font-optical-sizing: auto;
   font-weight: 400;
+  --background: #f8f7f4;
+  --foreground: #18181b;
   --paper: #f8f7f4;
-  --ink: #24221f;
-  --muted: #827f78;
+  --ink: #18181b;
+  --primary: #18181b;
+  --primary-foreground: #ffffff;
+  --muted: #f2efe9;
+  --muted-foreground: #6c6962;
   --line: #e7e4dd;
-  --accent: #aa7f55;
-  --serif: "Playfair Display", Georgia, serif;
+  --border: #e7e4dd;
+  --input: #e2ded5;
+  --ring: #18181b;
+  --card: #ffffff;
+  --card-foreground: #18181b;
+  --secondary: #ece8df;
+  --secondary-foreground: #18181b;
+  --accent: #e5e0d4;
+  --accent-foreground: #18181b;
+  --brand-accent: #aa7f55;
+  --serif: "DM Sans", "Playfair Display", Georgia, serif;
 }
 
 * {

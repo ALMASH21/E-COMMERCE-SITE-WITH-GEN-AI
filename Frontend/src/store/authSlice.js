@@ -78,6 +78,15 @@ export const loginOwnerAccount = createAsyncThunk(
     }, rejectWithValue),
 );
 
+export const loginWithGoogle = createAsyncThunk(
+  "auth/loginWithGoogle",
+  (credential, { rejectWithValue }) =>
+    requestAuth("/users/auth/google", {
+      method: "POST",
+      body: JSON.stringify({ credential }),
+    }, rejectWithValue),
+);
+
 export const fetchCurrentUser = createAsyncThunk(
   "auth/fetchCurrentUser",
   (_, { rejectWithValue }) => requestAuth("/users/profile", {}, rejectWithValue),
@@ -154,7 +163,7 @@ const authSlice = createSlice({
       })
       .addMatcher(
         (action) =>
-          [loginAccount.pending.type, registerAccount.pending.type, loginOwnerAccount.pending.type].includes(action.type),
+          [loginAccount.pending.type, registerAccount.pending.type, loginOwnerAccount.pending.type, loginWithGoogle.pending.type].includes(action.type),
         (state) => {
           state.status = "loading";
           state.profileStatus = "idle";
@@ -164,7 +173,7 @@ const authSlice = createSlice({
       )
       .addMatcher(
         (action) =>
-          [loginAccount.fulfilled.type, registerAccount.fulfilled.type, loginOwnerAccount.fulfilled.type].includes(action.type),
+          [loginAccount.fulfilled.type, registerAccount.fulfilled.type, loginOwnerAccount.fulfilled.type, loginWithGoogle.fulfilled.type].includes(action.type),
         (state, action) => {
           state.user = action.payload.user;
           state.status = "authenticated";
@@ -175,7 +184,7 @@ const authSlice = createSlice({
       )
       .addMatcher(
         (action) =>
-          [loginAccount.rejected.type, registerAccount.rejected.type, loginOwnerAccount.rejected.type].includes(action.type),
+          [loginAccount.rejected.type, registerAccount.rejected.type, loginOwnerAccount.rejected.type, loginWithGoogle.rejected.type].includes(action.type),
         (state, action) => {
           state.status = "unauthenticated";
           state.profileRequestId = null;

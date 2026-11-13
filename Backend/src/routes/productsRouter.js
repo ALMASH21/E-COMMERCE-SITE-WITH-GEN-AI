@@ -11,8 +11,9 @@ const staffOnly = [authUser, authorizeRoles("owner", "admin")];
 router.get("/", async (req, res, next) => {
     try {
         const filter = { status: "Active" };
-        if (typeof req.query.category === "string" && req.query.category.trim()) {
-            filter.category = req.query.category.trim();
+        const categoryQuery = typeof req.query.category === "string" ? req.query.category.trim() : "";
+        if (categoryQuery && categoryQuery !== "all" && categoryQuery !== "New arrivals") {
+            filter.category = categoryQuery;
         }
         if (typeof req.query.search === "string" && req.query.search.trim()) {
             const search = req.query.search.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&");

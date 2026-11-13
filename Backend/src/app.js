@@ -9,13 +9,35 @@ const productsRouter = require("./routes/productsRouter");
 const usersRouter = require("./routes/usersRouter");
 const ordersRouter = require("./routes/ordersRouter");
 const activityRouter = require("./routes/activityRouter");
+const authController = require("./controllers/auth.controller");
 
 const app = express();
+
+// Enable CORS with credentials for local dev and frontend clients
+app.use((req, res, next) => {
+    const origin = req.headers.origin;
+    if (origin) {
+        res.setHeader("Access-Control-Allow-Origin", origin);
+        res.setHeader("Access-Control-Allow-Credentials", "true");
+        res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS");
+        res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+    }
+    if (req.method === "OPTIONS") {
+        return res.sendStatus(204);
+    }
+    next();
+});
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, "..", "Public")));
 app.use(cookieParser());
+
+// Top-level Google OAuth routes matching Google Cloud Console redirect URI
+// e.g. http://localhost:3000/auth/google/callback
+app.get("/auth/google", authController.initiateGoogleAuth);
+app.get("/auth/google/callback", authController.googleAuthCallback);
+app.post("/auth/google", authController.loginWithGoogleCredential);
 
 app.use("/owners", ownersRouter);
 app.use("/users", usersRouter);

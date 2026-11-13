@@ -13,7 +13,8 @@ async function authUser(req, res, next) {
     if (!token) {
         return res.status(401).json({ message: "Authentication is required." });
     }
-    if (!process.env.JWT_SECRET) {
+    const jwtSecret = process.env.JWT_SECRET || (process.env.NODE_ENV !== "production" ? "development-jwt-secret-key-aurel-2025" : null);
+    if (!jwtSecret) {
         const error = new Error("JWT_SECRET must be configured before authentication can be used.");
         error.status = 500;
         return next(error);
@@ -21,7 +22,7 @@ async function authUser(req, res, next) {
 
     let decoded;
     try {
-        decoded = jwt.verify(token, process.env.JWT_SECRET);
+        decoded = jwt.verify(token, jwtSecret);
     } catch (error) {
         if (error instanceof jwt.JsonWebTokenError || error instanceof jwt.TokenExpiredError) {
             return res.status(401).json({ message: "Authentication token is invalid or expired." });
