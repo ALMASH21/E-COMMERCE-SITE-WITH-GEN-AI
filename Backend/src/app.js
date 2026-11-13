@@ -8,6 +8,7 @@ const ownersRouter = require("./routes/ownersRouter");
 const productsRouter = require("./routes/productsRouter");
 const usersRouter = require("./routes/usersRouter");
 const ordersRouter = require("./routes/ordersRouter");
+const activityRouter = require("./routes/activityRouter");
 
 const app = express();
 
@@ -20,6 +21,7 @@ app.use("/owners", ownersRouter);
 app.use("/users", usersRouter);
 app.use("/products", productsRouter);
 app.use("/orders", ordersRouter);
+app.use("/activity", activityRouter);
 
 // Centralize unexpected route errors without exposing internal details.
 app.use((error, req, res, next) => {

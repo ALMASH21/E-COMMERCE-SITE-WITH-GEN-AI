@@ -17,6 +17,7 @@ The seed command inserts the sample catalog only when a product with the same na
 Request validation failures return `400` with an `errors` array. Customer registration/login use `POST /users/register` and `POST /users/login`. Owner login uses `POST /owners/login`; the first local admin is created with `POST /owners/create`. Login issues an HTTP-only cookie, `POST /users/logout` clears it, and `GET`/`PATCH /users/profile` reads and updates customer details, preferences, and addresses.
 
 - `GET /products` and `GET /products/:productId` return active catalog products.
+- `POST /activity` records authenticated customer activity (`product_view`, `search`, `add_to_cart`, and wishlist events). Each request must include a client-generated `eventId`; repeated IDs for the same customer are idempotent.
 - `PUT`/`DELETE /users/wishlist/:productId` persist a customer's wishlist.
 - `POST /orders` validates current prices and stock, reserves inventory, and records a customer order. `GET /orders` lists that customer's orders. This demo does not collect or process payment information.
 - Owner endpoints under `/owners` include `GET /dashboard`, catalog CRUD, `GET /orders`, `PATCH /orders/:orderId/status`, and `GET /customers`.
